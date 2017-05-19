@@ -597,7 +597,7 @@ static FILE *find_file(char *name, int localdir)
 			: current_filename;
 
 		for (i = strlen(rfn) - 1; i >= 0; i --)
-#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
+#if defined(MSDOS) || defined(ATARI)
 			if (rfn[i] == '\\') break;
 #elif defined AMIGA
 			if (rfn[i] == '/' || rfn[i] == ':') break;
@@ -605,7 +605,7 @@ static FILE *find_file(char *name, int localdir)
 			if (rfn[i] == '/') break;
 #endif
 
-#if defined(MSDOS) || defined(ATARI) || defined(_WIN32)
+#if defined(MSDOS) || defined(ATARI)
 		if (i >= 0 && *name != '\\' && (nl < 2 || name[1] != ':'))
 #elif defined AMIGA
 		if (i >= 0 && strchr(name,':') == 0)
@@ -1186,7 +1186,7 @@ do_include_next:
 	if (!strcmp("time.h",fname)) misra(127,20,12,-1);
 #endif
 	set_current_filename(fname);
-	handle_deps(fname,string_fname);
+	handle_deps(current_long_filename,string_fname);
 	enter_file(ls, flags);
 	return 0;
 

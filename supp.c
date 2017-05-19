@@ -1504,6 +1504,18 @@ int bflayout(int bfoffset,int bfsize,int t)
 }
 #endif
 
+long get_pof2(zumax x)
+/*  Yields log2(x)+1 oder 0. */
+{
+  zumax p;int ln=1,max=(int)zm2l(zmmult(sizetab[MAXINT],char_bit));
+  p=ul2zum(1L);
+  while(ln<=max&&zumleq(p,x)){
+    if(zumeqto(x,p)) return ln;
+    ln++;p=zumadd(p,p);
+  }
+  return 0;
+}
+
 #ifdef HAVE_MISRA
 #define MISRA_NUMBER_RESERVED_WORDS 472
 char *misra_reserved[] = {      "__DATE__", "__FILE__" , "__LINE__", "__STDC__", "__STDC_VERSION__",    "__TIME__", "_IOFBF",
