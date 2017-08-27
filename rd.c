@@ -523,7 +523,7 @@ int propagate(struct IC *sic,struct obj *o,int cponly,int global)
   if(!found&&global&&v->storage_class!=EXTERN&&v->storage_class!=STATIC&&!(v->flags&USEDBEFORE)&&v->reg==0&&zmleq(l2zm(0L),v->offset)){
     if(*v->identifier||!(optflags&4096)){
 #ifdef HAVE_MISRA
-      misra_neu(30,9,1,0,v->identifier);
+/* removed */
 #endif
       error(171,v->identifier);v->flags|=USEDBEFORE;
       if(!*v->identifier) {printf("<%p>\n",(void *)v);ierror(0);}

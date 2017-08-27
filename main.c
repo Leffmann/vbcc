@@ -408,7 +408,8 @@ static void do_clist_calls(struct const_list *cl)
     if(cl->tree&&(cl->tree->o.flags&VARADR)){
       struct Var *v=cl->tree->o.v;
       if(ISFUNC(v->vtyp->flags)){
-	printf(":: %s\n",v->identifier);
+	if(DEBUG&1)
+	  printf(":: %s\n",v->identifier);
 	do_function(v);
       }
     }
@@ -770,111 +771,111 @@ int main(int argc,char *argv[])
     struct tunit *t;
     struct Var *v,*sf;
 #if HAVE_OSEK
-    int tprio;
-    char tstring[16];
-    static bvtype rused[RSIZE/sizeof(bvtype)];
-    static bvtype taskregs[RSIZE/sizeof(bvtype)];
-    static bvtype nonpairs[RSIZE/sizeof(bvtype)];
-    static bvtype isrregs[RSIZE/sizeof(bvtype)];
-    static bvtype tmpr[RSIZE/sizeof(bvtype)];
-    tasklist *tasks=0;
-    int tcnt=0;
-    if(DEBUG&1) printf("optimizing tasks:\n");
-    bvclear(taskregs,RSIZE);
-    for(i=1;i<=MAXR;i++)
-      if(!reg_pair(i,&rp))
-	BSET(nonpairs,i);
-    /*FIXME: more than 20*/
-    for(tprio=20;tprio>=0;tprio--){
-      int flag=0,r;
-      sprintf(tstring,"taskprio(%d)",tprio);
-      bvunite(rused,taskregs,RSIZE);
-      for(r=1;r<=MAXR;r++){
-	if(!noitra&&BTST(rused,r)){
-	  if(DEBUG&1) printf("taskreg used: %s\n",regnames[r]);
-	  reg_prio[r]=-1; /*FIXME: ugly intermediate hack */
-	}
-      }
-      for(v=first_ext;v;v=v->next){
-	if(ISFUNC(v->vtyp->flags)&&(v->flags&DEFINED)&&v->vattr&&strstr(v->vattr,tstring)){
-	  if(DEBUG&1) printf("optimizing task at prio %d\n",tprio);
-	  tcnt++;
-	  tasks=myrealloc(tasks,sizeof(*tasks)*tcnt);
-	  tasks[tcnt-1].v=v;
-	  if(!v->vattr||!strstr(v->vattr,"taskid(")) ierror(0);
-	  {
-	    char *p=strstr(v->vattr,"taskid(");
-	    sscanf(p+7,"%i",&tasks[tcnt-1].taskid);
-	  }
-	  tasks[tcnt-1].prio=tprio;
-	  bvclear(task_preempt_regs,RSIZE);
-	  bvclear(task_schedule_regs,RSIZE);
-	  do_function(v);
-	  if(!v->fi) v->fi=new_fi();
-	  tasks[tcnt-1].flags=v->fi->osflags;
-	  if(v->vattr&&strstr(v->vattr,"nonpreemptive;")) tasks[tcnt-1].flags|=NON_PREEMPTIVE;
-	  if(v->vattr&&strstr(v->vattr,"isr;"))
-	    tasks[tcnt-1].flags|=ISR;
-	  if(!(v->fi->flags&ALL_REGS))
-	    memset(v->fi->regs_modified,0xff,RSIZE);
-	  bvunite(taskregs,v->fi->regs_modified,RSIZE);
-	  bvcopy(tasks[tcnt-1].preempt_context,task_preempt_regs,RSIZE);
-	  bvcopy(tasks[tcnt-1].schedule_context,task_schedule_regs,RSIZE);
-	  bvcopy(tasks[tcnt-1].context,rused,RSIZE);
-	  if(tasks[tcnt-1].flags&NON_PREEMPTIVE)
-	    bvintersect(tasks[tcnt-1].context,task_schedule_regs,RSIZE);
-	  else
-	    bvintersect(tasks[tcnt-1].context,v->fi->regs_modified,RSIZE);
-	  if(tasks[tcnt-1].flags&ISR){
-	    bvunite(isrregs,v->fi->regs_modified,RSIZE);
-	  }else{
-	    /* all (incl. non-preemptive) tasks can be preempted by ISRs */
-	    bvcopy(tmpr,v->fi->regs_modified,RSIZE);
-	    bvintersect(tmpr,isrregs,RSIZE);
-	    bvunite(tasks[tcnt-1].context,tmpr,RSIZE);
-	  }
-	  bvintersect(tasks[tcnt-1].context,nonpairs,RSIZE);
-	  bvcopy(tasks[tcnt-1].unsaved_context,v->fi->regs_modified,RSIZE);
-	  bvintersect(tasks[tcnt-1].unsaved_context,nonpairs,RSIZE);
-	  bvdiff(tasks[tcnt-1].unsaved_context,tasks[tcnt-1].context,RSIZE);
-	}
-      }
-    }  
-    /* add preempted registers */
-    bvunite(rused,taskregs,RSIZE);
-    for(i=0;i<tcnt;i++){
-      for(j=0;j<tcnt;j++)
-	if(i!=j)
-	  bvintersect(tasks[i].preempt_context,tasks[j].v->fi->regs_modified,RSIZE);
-      bvunite(tasks[i].context,tasks[i].preempt_context,RSIZE);
-    }
-    
-    if(tcnt) printf("\ntask information:\n");
-    for(i=0;i<tcnt;i++){
-      int r;
-      printf("\ntask %d (%s) id %d prio %d:\n",i,tasks[i].v->identifier,tasks[i].taskid,tasks[i].prio);
-      if(tasks[i].flags&DOES_BLOCK) printf("does block\n");
-      if(tasks[i].flags&NON_PREEMPTIVE) printf("non-preemptive\n");
-      if(tasks[i].flags&CALLS_SCHED) printf("calls scheduler\n");
-      if(tasks[i].flags&ISR) printf("is interrupt\n");
-      printf("context: ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].context,r)) printf(" %s",regnames[r]);
-      printf("\nlive across WaitEvent(): ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].preempt_context,r)) printf(" %s",regnames[r]);
-      printf("\nlive across Schedule(): ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].schedule_context,r)) printf(" %s",regnames[r]);
-      printf("\nall registers used: ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].v->fi->regs_modified,r)) printf(" %s",regnames[r]);
-      printf("\n");
-    }
-    if(tcnt>0){
-      extern void emit_os(FILE *,tasklist *,int);
-      emit_os(out,tasks,tcnt);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(DEBUG&1) printf("first optimizing\n");
     for(v=first_ext;v;v=v->next){
@@ -1570,32 +1571,32 @@ void do_pragma(char *s)
     if(tree) free_expression(tree);
 #endif
 #ifdef HAVE_ECPP
-  /* cd: for more detailed debugging */
-  }else if(!strncmp("print_decls",s,11)){
-    int i=0;
-    struct struct_declaration *sd;
-    s+=11;pragma_killsp();
-    sd = first_sd[0];
-    while(sd){
-      fprintf(stdout, "decl %d: ", i);
-      prl(stdout, sd);
-      fprintf(stdout, "\n");
-      sd = sd->next;
-      ++i;
-    }
-  }else if(!strncmp("print_vars",s,10)){
-    int i=0;
-    struct Var *v;
-    s+=10;pragma_killsp();
-    v = first_ext;
-    while(v){
-      fprintf(stdout, "var %d: ", i);
-      print_var(stdout, v);
-      fprintf(stdout, "\n");
-      v = v->next;
-      ++i;
-    }
-    fprintf(stdout, "\n");
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   }else{
 #ifdef HAVE_TARGET_PRAGMAS
@@ -1638,9 +1639,9 @@ void enter_block(void)
         afterlabel=0;
     }
 #ifdef HAVE_ECPP
-  if(ecpp){
-    ecpp_dlist[nesting]=0;
-  }
+/* removed */
+/* removed */
+/* removed */
 #endif
 }
 void leave_block(void)
@@ -1651,9 +1652,9 @@ void leave_block(void)
   if(inleave) return;
   inleave=1;
 #ifdef HAVE_ECPP
-  if(ecpp&&nesting>1){
-    ecpp_auto_call_dtors();
-  }
+/* removed */
+/* removed */
+/* removed */
 #endif
   for(i=1;i<=MAXR;i++)
     if(regbnesting[i]==nesting) regsbuf[i]=0;
@@ -1761,7 +1762,7 @@ void do_error(int errn,va_list vl)
     if(errn==-1) errn=158;
     type=err_out[errn].flags;
 #ifdef HAVE_MISRA
-    if(type&ANSIV) misra_neu(1,1,1,-1);
+/* removed */
 #endif
     if(type&DONTWARN) return;
     if(type&WARNING) errstr="warning";

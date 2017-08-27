@@ -63,17 +63,17 @@ typedef unsigned int bvtype;
 #define BOOLEAN (STRINGCONST<<1)
 #define SIGNED_CHARACTER (BOOLEAN<<1)
 #ifdef HAVE_ECPP
-#define ECPP_VIRTUAL 1
-#define ECPP_STATIC 2
-#define ECPP_TV 4
-#define ECPP_CTOR 8
-#define ECPP_DTOR 16
-#define ECPP_POD 32
-#define ECPP_PRIVATE 64
-#define ECPP_PROTECTED 128
-#define ECPP_PUBLIC 256
-#define ECPP_NESTED_CLASS 512
-#define ECPP_FRIEND 1024
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 #define t_min(x) (((x)&UNSIGNED)?l2zm(0L):t_min[(x)&NQ])
 #define t_max(x) (((x)&UNSIGNED)?tu_max[(x)&NQ]:t_max[(x)&NQ])
@@ -170,9 +170,9 @@ struct function_info{
   /* registers used and modified by that function */
   bvtype regs_modified[RSIZE/sizeof(bvtype)];
 #if HAVE_OSEK
-  bvtype preempt_regs[RSIZE/sizeof(bvtype)];
-  bvtype schedule_regs[RSIZE/sizeof(bvtype)];
-  int osflags;
+/* removed */
+/* removed */
+/* removed */
 #endif
   zumax stack1;
   zumax stack2;
@@ -187,7 +187,7 @@ struct Typ{
   char *attr;
   int reg;
 #ifdef HAVE_ECPP
-	int ecpp_flags;
+/* removed */
 #endif
 };
 #define TYPS sizeof(struct Typ)
@@ -304,7 +304,7 @@ struct struct_list{
   int storage_class;  /* storage-class of function-parameter */
   int reg;            /* register to pass function-parameter */
 #ifdef HAVE_ECPP
-	char *mangled_identifier;
+/* removed */
 #endif
 };
 
@@ -321,15 +321,15 @@ struct struct_declaration{
   struct struct_list (*sl)[];
   char *identifier;
 #ifdef HAVE_ECPP
-  /* the class this declaration is nested in, i.e. if it's a class, the surrounding */
-  /* class, if it's a function, the class this function belongs to */
-  struct struct_declaration *higher_nesting;
-  struct struct_declaration *base_class;
-  int base_access;
-  int ecpp_flags;
-  char *mangled_identifier;
-  int num_friends;
-  struct struct_declaration **friends;
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 };
 
@@ -508,7 +508,7 @@ extern union atyps gval;
 extern int DEBUG;
 #endif
 #ifdef HAVE_MISRA
-int misra_check_use_warn(const char*);
+/* removed */
 #endif
 /*  used by the optimizer */
 /* for lists in ICs flags may be DREFOBJ to mark dereferences */
@@ -610,8 +610,8 @@ extern int ecpp;
 extern void add_IC(struct IC *);
 extern void error(int,...);
 #ifdef HAVE_MISRA
-extern void misra(int,...);
-extern void misra_neu(int, int, int, int, ...);
+/* removed */
+/* removed */
 #endif
 extern struct Var *add_tmp_var(struct Typ *);
 extern void free_var(struct Var *);
@@ -776,18 +776,18 @@ extern void mark_eff_ics(void);
 #define AVOID_UNSIGNED_TO_FLOAT 0
 #endif
 #if HAVE_OSEK
-/* used for special operating system support */
-extern bvtype task_preempt_regs[],task_schedule_regs[];
-typedef struct tasklist {
-  struct Var *v;
-  int prio;
-  int taskid;
-  enum {NON_PREEMPTIVE=1,DOES_BLOCK=2,CALLS_SCHED=4,ISR=8} flags;
-  bvtype context[BVSIZE(MAXR+1)/sizeof(bvtype)];
-  bvtype preempt_context[BVSIZE(MAXR+1)/sizeof(bvtype)];
-  bvtype schedule_context[BVSIZE(MAXR+1)/sizeof(bvtype)];
-  bvtype unsaved_context[BVSIZE(MAXR+1)/sizeof(bvtype)];
-} tasklist;
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
 

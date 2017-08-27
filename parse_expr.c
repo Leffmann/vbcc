@@ -29,7 +29,7 @@ np expression(void)
   killsp();
   while(ctok->type==COMMA){
 #ifdef HAVE_MISRA
-    if(!misracomma) misra_neu(42,12,10,0);
+/* removed */
 #endif
     next_token();
     killsp();
@@ -117,14 +117,14 @@ np logical_or_expression(void)
   killsp();
   while(ctok->type==T_LOR){
 #ifdef HAVE_MISRA
-    if(bra==0&&left->flags!=IDENTIFIER&&left->flags!=CEXPR) misra_neu(34,12,5,0);
+/* removed */
 #endif
     next_token();
     killsp();
     if(ctok->type==LPAR) bra=1; else bra=0;
     right=logical_and_expression();
 #ifdef HAVE_MISRA
-    if(bra==0&&right->flags!=IDENTIFIER&&right->flags!=CEXPR) misra_neu(34,12,5,0);
+/* removed */
 #endif
     new=new_node();
     new->left=left;
@@ -146,14 +146,14 @@ np logical_and_expression(void)
   killsp();
   while(ctok->type==T_LAND){
 #ifdef HAVE_MISRA
-    if(bra==0&&left->flags!=IDENTIFIER&&left->flags!=CEXPR) misra_neu(34,12,5,0);
+/* removed */
 #endif
     next_token();
     killsp();
     if(ctok->type==LPAR) bra=1; else bra=0;
     right=inclusive_or_expression();
 #ifdef HAVE_MISRA
-    if(bra==0&&right->flags!=IDENTIFIER&&right->flags!=CEXPR) misra_neu(34,12,5,0);
+/* removed */
 #endif
     new=new_node();
     new->left=left;
@@ -474,7 +474,7 @@ np unary_expression(void)
 	}else{
 	  if(op==SIZEOF){
 #ifdef HAVE_MISRA
-	    if(tree->sidefx) misra_neu(40,12,3,0);
+/* removed */
 #endif
 		if(type_uncomplete(tree->ntyp)) error(176);
 	    if(is_vlength(tree->ntyp)){
@@ -586,22 +586,22 @@ np postfix_expression(void)
     }else if(ctok->type==LPAR){
       struct argument_list *al,*first_alist=0,*last_alist=0;np n;
 #ifdef HAVE_MISRA
-      if(left&&left->identifier){
-			if (	(!strcmp(left->identifier,"malloc")) ||
-						(!strcmp(left->identifier,"calloc")) ||
-						(!strcmp(left->identifier,"realloc")) ||
-						(!strcmp(left->identifier,"free")) ) misra_neu(118,20,4,0);
-			else if (  (!strcmp(left->identifier,"atof")) ||
-						(!strcmp(left->identifier,"atoi")) ||
-						(!strcmp(left->identifier,"atol")) ) misra_neu(125,20,10,0);
-			else if (	(!strcmp(left->identifier,"abort")) ||
-						(!strcmp(left->identifier,"exit")) ||
-						(!strcmp(left->identifier,"getenv")) ||
-						(!strcmp(left->identifier,"system")) ) misra_neu(126,20,11,0);
-			else if (	(!strcmp(left->identifier,"setjmp")) ||
-						(!strcmp(left->identifier,"longjmp")) ) misra_neu(122,20,7,0);
-			else if ( misra_check_use_warn(left->identifier) ) misra_neu(0,20,0,0);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       new->left=left;
       new->flags=CALL;
@@ -686,7 +686,7 @@ np string_expression(void)
     s=ctok->name;
     if(*s=='L') {
 #ifdef HAVE_MISRA
-		misra_neu(8,0,0,0);
+/* removed */
 #endif
 		s++;}    /*  Noch keine erweiterten Zeichen  */
     if(ctok->type==T_STRING&&*s!='\"') ierror(0);
@@ -736,7 +736,7 @@ np string_expression(void)
 	}
 	error(71);
 #ifdef HAVE_MISRA
-	misra_neu(5,4,1,0,'\\',*s);
+/* removed */
 #endif
       }
       *p++=*s++;
@@ -775,7 +775,7 @@ np string_expression(void)
     p--;
     if(p>string){ error(72);
 #ifdef HAVE_MISRA
-		misra_neu(8,0,0,0);
+/* removed */
 #endif
 	} 
     for(BIGENDIAN?(l=string):(l=p);BIGENDIAN?(l<=p):(l>=string);BIGENDIAN?(l++):(l--)){
@@ -828,7 +828,7 @@ np constant_expression(void)
   }
   while((!(tm&UNSIGNED)&&(*s=='u'||*s=='U'))||((tm&NQ)==0&&(*s=='l'||*s=='L'))){
 #ifdef HAVE_MISRA
-	  if(*s=='l') misra_neu(18,0,0,0); /* use L instead of l */
+/* removed */
 #endif
     if(!(tm&UNSIGNED)&&(*s=='u'||*s=='U')){
       if((tm&NQ)==LONG){
@@ -949,7 +949,7 @@ np constant_expression(void)
 	  new->ntyp->flags=LLONG;
       }else{
 #ifdef HAVE_MISRA
-	if(base==8&&!zumeqto(value,ul2zum(0UL))) misra_neu(19,7,1,0);
+/* removed */
 #endif
 	if(zumleq(value,t_max(INT)))
 	  new->ntyp->flags=INT; 
@@ -991,7 +991,7 @@ np identifier_expression(void)
   if(ctok->type==NAME){
     if(is_keyword(ctok->name)) error(216,ctok->name);
 #ifdef HAVE_MISRA
-    if(!strcmp("errno",ctok->name)) misra_neu(119,20,5,0);
+/* removed */
 #endif
     new=new_node();
     new->flags=IDENTIFIER;
