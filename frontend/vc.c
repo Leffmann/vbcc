@@ -265,6 +265,27 @@ static int read_config(const char *cfg_name)
         free(name);
       }
     }
+
+#if defined(__CYGWIN__) || defined (__linux__)
+    if (!file) {
+		char buf[1040], *p;
+#ifdef __CYGWIN__
+		GetModuleFileNameA(0, buf, 1023);
+#else
+		readlink( "/proc/self/exe", buf, 1023);
+#endif
+		for (p = buf + strlen(buf); p > buf;) {
+			--p;
+			if (*p == '/' || *p == '\\') {
+				*++p = 0;
+				break;
+			}
+		}
+		strcat(buf, cfg_name);
+		file=fopen(buf, "r");
+    }
+#endif
+
     if(!file) {puts("No config file!");raus(EXIT_FAILURE);}
     if(fseek(file,0,SEEK_END)) return 0;
     size=ftell(file);
