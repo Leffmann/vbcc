@@ -7,6 +7,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef __CYGWIN__
+#include <windows.h>
+#endif
+
 #ifdef AMIGA
 #pragma amiga-align
 #ifdef __amigaos4__
