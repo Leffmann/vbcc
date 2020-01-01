@@ -1,4 +1,4 @@
-/*  $VER: vbcc (parse_expr.c) V0.8  */
+/*  $VER: vbcc (parse_expr.c) $Revision: 1.16 $  */
 
 #include "vbcc_cpp.h"
 #include "vbc.h"
@@ -29,7 +29,7 @@ np expression(void)
   killsp();
   while(ctok->type==COMMA){
 #ifdef HAVE_MISRA
-/* removed */
+    if(!misracomma) misra_neu(42,12,10,0);
 #endif
     next_token();
     killsp();
@@ -117,14 +117,14 @@ np logical_or_expression(void)
   killsp();
   while(ctok->type==T_LOR){
 #ifdef HAVE_MISRA
-/* removed */
+    if(bra==0&&left->flags!=IDENTIFIER&&left->flags!=CEXPR) misra_neu(34,12,5,0);
 #endif
     next_token();
     killsp();
     if(ctok->type==LPAR) bra=1; else bra=0;
     right=logical_and_expression();
 #ifdef HAVE_MISRA
-/* removed */
+    if(bra==0&&right->flags!=IDENTIFIER&&right->flags!=CEXPR) misra_neu(34,12,5,0);
 #endif
     new=new_node();
     new->left=left;
@@ -146,14 +146,14 @@ np logical_and_expression(void)
   killsp();
   while(ctok->type==T_LAND){
 #ifdef HAVE_MISRA
-/* removed */
+    if(bra==0&&left->flags!=IDENTIFIER&&left->flags!=CEXPR) misra_neu(34,12,5,0);
 #endif
     next_token();
     killsp();
     if(ctok->type==LPAR) bra=1; else bra=0;
     right=inclusive_or_expression();
 #ifdef HAVE_MISRA
-/* removed */
+    if(bra==0&&right->flags!=IDENTIFIER&&right->flags!=CEXPR) misra_neu(34,12,5,0);
 #endif
     new=new_node();
     new->left=left;
@@ -362,7 +362,7 @@ np cast_expression(void)
     killsp();
     if(new->cl){
       if(ISARRAY(new->ntyp->flags)&&zmeqto(new->ntyp->size,l2zm(0L))){
-	struct const_list *p=new->cl;
+	const_list *p=new->cl;
 	while(p){new->ntyp->size=zmadd(p->idx,l2zm(1L));p=p->next;}
       }
     }
@@ -411,7 +411,7 @@ np unary_expression(void)
       new->left=0;
       
       if(ctok->type==LPAR&&declaration(1)){
-	struct Typ *t;
+	type *t;
 	next_token();killsp();
 	buff[0]=0;
 	merk=ident;ident=buff;
@@ -461,7 +461,7 @@ np unary_expression(void)
 	if(op==OFFSETOF) error(0);
 	killsp();
 	tree=unary_expression();
-	if(!tree||!type_expression(tree)){
+	if(!tree||!type_expression(tree,0)){
 	  if(op==SIZEOF){
 	    if(HAVE_INT_SIZET)
 	      new->val.vuint=zum2zui(ul2zum(0UL));
@@ -474,7 +474,7 @@ np unary_expression(void)
 	}else{
 	  if(op==SIZEOF){
 #ifdef HAVE_MISRA
-/* removed */
+	    if(tree->sidefx) misra_neu(40,12,3,0);
 #endif
 		if(type_uncomplete(tree->ntyp)) error(176);
 	    if(is_vlength(tree->ntyp)){
@@ -584,24 +584,24 @@ np postfix_expression(void)
       new->flags=DSTRUCT;
       new->right->flags=MEMBER;
     }else if(ctok->type==LPAR){
-      struct argument_list *al,*first_alist=0,*last_alist=0;np n;
+      argument_list *al,*first_alist=0,*last_alist=0;np n;
 #ifdef HAVE_MISRA
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+      if(left&&left->identifier){
+			if (	(!strcmp(left->identifier,"malloc")) ||
+						(!strcmp(left->identifier,"calloc")) ||
+						(!strcmp(left->identifier,"realloc")) ||
+						(!strcmp(left->identifier,"free")) ) misra_neu(118,20,4,0);
+			else if (  (!strcmp(left->identifier,"atof")) ||
+						(!strcmp(left->identifier,"atoi")) ||
+						(!strcmp(left->identifier,"atol")) ) misra_neu(125,20,10,0);
+			else if (	(!strcmp(left->identifier,"abort")) ||
+						(!strcmp(left->identifier,"exit")) ||
+						(!strcmp(left->identifier,"getenv")) ||
+						(!strcmp(left->identifier,"system")) ) misra_neu(126,20,11,0);
+			else if (	(!strcmp(left->identifier,"setjmp")) ||
+						(!strcmp(left->identifier,"longjmp")) ) misra_neu(122,20,7,0);
+			else if ( misra_check_use_warn(left->identifier) ) misra_neu(0,20,0,0);
+      }
 #endif
       new->left=left;
       new->flags=CALL;
@@ -613,15 +613,15 @@ np postfix_expression(void)
   }
   return left;
 }
-struct argument_list *argument_list_expression(void)
+argument_list *argument_list_expression(void)
 /* returns CALL node with alist attached, but without identifier */
 {
-  struct argument_list *al,*first_alist=0,*last_alist=0;np n;
+  argument_list *al,*first_alist=0,*last_alist=0;np n;
   if(ctok->type!=LPAR)ierror(0);
   next_token();killsp();
   while(ctok->type!=RPAR){
     n=assignment_expression();
-    al=mymalloc(sizeof(struct argument_list));
+    al=mymalloc(sizeof(argument_list));
     al->arg=n;al->next=0;
     if(last_alist){
       last_alist->next=al;
@@ -641,7 +641,7 @@ struct argument_list *argument_list_expression(void)
 np primary_expression(void)
 /*  primary-expressions (Konstanten,Strings,(expr),Identifier)  */
 {
-  np new;struct token mtok;
+  np new;token mtok;
   if(ctok->type==NUMBER) return constant_expression();
   if(ctok->type==T_STRING||ctok->type==T_CHAR) return string_expression();
   if(ctok->type==LPAR){
@@ -654,9 +654,9 @@ np primary_expression(void)
   return identifier_expression();
 }
 
-struct const_list *cl_from_string(char *start, char *end)
+const_list *cl_from_string(char *start, char *end)
 {
-  struct const_list *r,*cl,**prev;int i;
+  const_list *r,*cl,**prev;int i;
   prev=&r;
   for(i=0;i<end-start+1;i++){
     cl=mymalloc(CLS);
@@ -686,7 +686,7 @@ np string_expression(void)
     s=ctok->name;
     if(*s=='L') {
 #ifdef HAVE_MISRA
-/* removed */
+		misra_neu(8,0,0,0);
 #endif
 		s++;}    /*  Noch keine erweiterten Zeichen  */
     if(ctok->type==T_STRING&&*s!='\"') ierror(0);
@@ -736,7 +736,7 @@ np string_expression(void)
 	}
 	error(71);
 #ifdef HAVE_MISRA
-/* removed */
+	misra_neu(5,4,1,0,'\\',*s);
 #endif
       }
       *p++=*s++;
@@ -775,7 +775,7 @@ np string_expression(void)
     p--;
     if(p>string){ error(72);
 #ifdef HAVE_MISRA
-/* removed */
+		misra_neu(8,0,0,0);
 #endif
 	} 
     for(BIGENDIAN?(l=string):(l=p);BIGENDIAN?(l<=p):(l>=string);BIGENDIAN?(l++):(l--)){
@@ -828,7 +828,7 @@ np constant_expression(void)
   }
   while((!(tm&UNSIGNED)&&(*s=='u'||*s=='U'))||((tm&NQ)==0&&(*s=='l'||*s=='L'))){
 #ifdef HAVE_MISRA
-/* removed */
+	  if(*s=='l') misra_neu(18,0,0,0); /* use L instead of l */
 #endif
     if(!(tm&UNSIGNED)&&(*s=='u'||*s=='U')){
       if((tm&NQ)==LONG){
@@ -949,7 +949,7 @@ np constant_expression(void)
 	  new->ntyp->flags=LLONG;
       }else{
 #ifdef HAVE_MISRA
-/* removed */
+	if(base==8&&!zumeqto(value,ul2zum(0UL))) misra_neu(19,7,1,0);
 #endif
 	if(zumleq(value,t_max(INT)))
 	  new->ntyp->flags=INT; 
@@ -991,7 +991,7 @@ np identifier_expression(void)
   if(ctok->type==NAME){
     if(is_keyword(ctok->name)) error(216,ctok->name);
 #ifdef HAVE_MISRA
-/* removed */
+    if(!strcmp("errno",ctok->name)) misra_neu(119,20,5,0);
 #endif
     new=new_node();
     new->flags=IDENTIFIER;
@@ -1008,10 +1008,10 @@ np identifier_expression(void)
   }
   return new;
 }
-void free_alist(struct argument_list *p)
+void free_alist(argument_list *p)
 /*  Gibt argument_list inkl. expressions frei  */
 {
-  struct argument_list *merk;
+  argument_list *merk;
   while(p){
     merk=p->next;
     if(p->arg) free_expression(p->arg);

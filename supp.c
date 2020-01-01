@@ -1,3 +1,5 @@
+/*  $VER: vbcc (supp.c) $Revision: 1.32 $     */
+
 #include "supp.h"
 #include "opt.h"
 
@@ -51,7 +53,7 @@ int DEBUG;
 int label;
 
 int regs[MAXR+1],regused[MAXR+1],simple_scratch[MAXR+1];
-struct Var *regsv[MAXR+1];
+Var *regsv[MAXR+1];
 int goto_used;
 int ic_count;
 zmax max_offset;
@@ -62,8 +64,8 @@ int disable;
 int multiple_ccs;
 int lastlabel,return_label;
 int only_inline;
-struct IC *err_ic;
-long maxoptpasses=10;
+IC *err_ic;
+long maxoptpasses=30;
 long optflags;
 int optsize,optspeed,unroll_all,stack_check;
 int cross_module,final,no_emit;
@@ -73,11 +75,11 @@ long inline_depth=1;
 long unroll_size=200;
 int fp_assoc,noaliasopt,noitra;
 char *filename;
-struct IC *first_ic,*last_ic;
+IC *first_ic,*last_ic;
 int float_used;
 bvtype regs_modified[RSIZE/sizeof(bvtype)];
 /*  Das haette ich gern woanders    */
-struct Var *vl0,*vl1,*vl2,*vl3;
+Var *vl0,*vl1,*vl2,*vl3;
 int align_arguments=1;
 zmax stackalign;
 int misracheck,misraversion,misracomma,misratok;
@@ -90,10 +92,10 @@ char *emit_p;
 int emit_f,emit_l;
 int no_inline_peephole;
 
-struct Typ *new_typ(void)
+type *new_typ(void)
 /*  Erzeigt neuen (leeren) Typ.  */
 {
-  struct Typ *new=mymalloc(TYPS);
+  type *new=mymalloc(TYPS);
   new->flags=0;
   new->next=0;
   new->exact=0;
@@ -101,15 +103,15 @@ struct Typ *new_typ(void)
   new->dsize=0;
   new->reg=0;
 #ifdef HAVE_ECPP
-/* removed */
+  new->ecpp_flags=0;
 #endif
   return new;
 }
 
-struct Typ *clone_typ(struct Typ *old)
+type *clone_typ(type *old)
 /*  Erzeugt Kopie eines Typs und liefert Zeiger auf Kopie.  */
 {
-  struct Typ *new;
+  type *new;
   if(!old) return 0;
   new=new_typ();
   *new=*old;
@@ -120,9 +122,9 @@ struct Typ *clone_typ(struct Typ *old)
   if(new->next) new->next=clone_typ(new->next);
   return new;
 }
-struct Var *new_var(void)
+Var *new_var(void)
 {
-  struct Var *new=mymalloc(sizeof(*new));
+  Var *new=mymalloc(sizeof(*new));
   new->clist=0;
   new->vtyp=0;
   new->storage_class=0;
@@ -150,9 +152,9 @@ struct Var *new_var(void)
   return new;
 }  
 
-struct IC *new_IC(void)
+IC *new_IC(void)
 {
-  struct IC *p=mymalloc(ICS);
+  IC *p=mymalloc(ICS);
   p->change_cnt=0;
   p->use_cnt=0;
   p->call_cnt=0;
@@ -179,9 +181,9 @@ struct IC *new_IC(void)
   return p;
 }
 /* (partially) clones an IC list */
-struct IC *clone_ic(struct IC *p)
+IC *clone_ic(IC *p)
 {
-  struct IC *new,*first,*last;
+  IC *new,*first,*last;
   first=last=new=0;
   while(p){
     new=mymalloc(sizeof(*new));
@@ -203,10 +205,10 @@ struct IC *clone_ic(struct IC *p)
   }
   return first;
 }    
-void free_IC(struct IC *p)
+void free_IC(IC *p)
 /*  Gibt IC-Liste inkl. Typen frei.                 */
 {
-  struct IC *merk;
+  IC *merk;
   if(DEBUG&1) printf("free_IC()\n");
   while(p){
     /*if(p->q1.am&&!p->q1.flags) ierror(0);
@@ -222,7 +224,7 @@ void free_IC(struct IC *p)
     p=merk;
   }
 }
-void move_IC(struct IC *after,struct IC *p)
+void move_IC(IC *after,IC *p)
 {
   if(p->prev)
     p->prev->next=p->next;
@@ -234,7 +236,7 @@ void move_IC(struct IC *after,struct IC *p)
     last_ic=p->prev;
   insert_IC(after,p);
 }
-void remove_IC(struct IC *p)
+void remove_IC(IC *p)
 /*  Entfernt IC p aus Liste. */
 {
   if(p->prev) p->prev->next=p->next; else first_ic=p->next;
@@ -244,10 +246,10 @@ void remove_IC(struct IC *p)
   if(p->z.am) free(p->z.am);
   free(p);
 }
-void freetyp(struct Typ *p)
+void freetyp(type *p)
 /* Gibt eine Typ-Liste frei, aber keine struct_declaration oder so. */
 {
-  int f;struct Typ *merk;
+  int f;type *merk;
   if(DEBUG&8){printf("freetyp: ");prd(stdout,p);printf("\n");}
   while(p){
     merk=p->next;
@@ -261,7 +263,7 @@ void freetyp(struct Typ *p)
 }
 
 #ifndef HAVE_TGT_FALIGN
-zmax falign(struct Typ *t)
+zmax falign(type *t)
 /*  Liefert Alignment eines Typs. Funktioniert im Gegensatz zum  */
 /*  align[]-Array auch mit zusammengesetzten Typen.              */
 {
@@ -290,7 +292,7 @@ zmax falign(struct Typ *t)
 #endif
 
 /* check, whether t is a variable length array */
-int is_vlength(struct Typ *t)
+int is_vlength(type *t)
 {
   if(!ISARRAY(t->flags))
     return 0;
@@ -301,9 +303,9 @@ int is_vlength(struct Typ *t)
 }
 
 /* calculate size of a variable length array */
-struct Var *vlength_szof(struct Typ *t)
+Var *vlength_szof(type *t)
 {
-  struct IC *new;struct Typ *nt;
+  IC *new;type *nt;
   if(!ISARRAY(t->flags))
     ierror(0);
   new=new_IC();
@@ -388,12 +390,12 @@ int VECTYPE(int x)
 
 
 #ifndef HAVE_TGT_SZOF
-zmax szof(struct Typ *t)
+zmax szof(type *t)
 /*  Liefert die benoetigte Groesse eines Typs in Bytes.     */
 {
   int i=t->flags&NQ,j;zmax size,m;
 #ifdef HAVE_ECPP
-/* removed */
+  if(ecpp&&ISFUNC(t->flags))return l2zm(0L);
 #endif
 
   if(ISSCALAR(i)) return sizetab[i];
@@ -421,20 +423,20 @@ zmax szof(struct Typ *t)
   if(ISSTRUCT(i)){
     size=l2zm(0L);
 #ifdef HAVE_ECPP
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+    if(ecpp&&t->exact->base_class){
+      type* t2=new_typ();
+      t2->flags=STRUCT;
+      t2->exact=t->exact->base_class;
+      size=zmadd(size,szof(t2));
+      freetyp(t2);
+    }
 #endif
     for(j=0;j<t->exact->count;j++){
-      struct Typ *h=(*t->exact->sl)[j].styp;
+      type *h=(*t->exact->sl)[j].styp;
       if((*t->exact->sl)[j].bfoffset<=0){
         m=(*t->exact->sl)[j].align;
 #ifdef HAVE_ECPP
-/* removed */
+        if(ecpp&&zmeqto(m,l2zm(0L)))continue;
 #endif
         if(zmeqto(m,l2zm(0L))) {prd(stdout,h);ierror(0);}
         size=zmmult(zmdiv(zmadd(size,zmsub(m,l2zm(1L))),m),m);
@@ -448,7 +450,7 @@ zmax szof(struct Typ *t)
   }
   return sizetab[i];
 }
-zmax struct_offset(struct struct_declaration *sd,const char *identifier)
+zmax struct_offset(struct_declaration *sd,const char *identifier)
 {
   int i=0,intbitfield=-1;zmax offset=l2zm(0),al;
   while(i<sd->count&&strcmp((*sd->sl)[i].identifier,identifier)){
@@ -469,38 +471,38 @@ zmax struct_offset(struct struct_declaration *sd,const char *identifier)
   return offset;
 }
 #ifdef HAVE_ECPP
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+zmax ecpp_struct_offset(struct_declaration *sd,const char *identifier,struct_declaration *sd2)
+/* e.g. when looking for offset of "B b; b.A::x;", where A is base of B: sd=B,id=x,sd2=A */
+{
+  int i=0,intbitfield=-1;zmax offset=l2zm(0),al;int done=0;
+  zmax base_offset=l2zm(0);
+  /* FIXME: is alignment handling really correct? */
+  if(sd2)while(sd!=sd2)sd=sd->base_class;
+  if(sd->base_class)base_offset=ecpp_struct_offset(sd->base_class,identifier,0);
+  if(!sd2&&sd->ecpp_flags&ECPP_VIRTUAL)i=1; /* skip vtable pointer of bases */
+  for(;;){
+    if(i>=sd->count)break;
+    if(sd2&&!strcmp((*sd->sl)[i].identifier,identifier))break;
+    if((*sd->sl)[i].bfoffset>=0){
+      if(i+1<sd->count&&(*sd->sl)[i+1].bfoffset>0){
+        i++;
+        continue;
+      }
+    }
+    al=(*sd->sl)[i].align;
+    if(zmeqto(al,l2zm(0L))){i++;continue;}
+    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
+    offset=zmadd(offset,szof((*sd->sl)[i].styp));
+    i++;
+  }
+  offset=zmadd(offset,base_offset);
+  if(sd==sd2){
+    if(i>=sd->count) {error(23,identifier);return l2zm(0L);}
+    al=(*sd->sl)[i].align;
+    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
+  }
+  return offset;
+}
 #endif
 #endif
 
@@ -551,7 +553,7 @@ void emitval(FILE *f,union atyps *p,int t)
 }
 #endif
 
-void pric2(FILE *f,struct IC *p)
+void pric2(FILE *f,IC *p)
 /*  Gibt ein IC aus.  */
 {
   if(p->code>NOP) ierror(0);
@@ -615,7 +617,7 @@ fprintf(f,"%p!\n",p->arg_list[i]);
   }
 #endif
 }
-void pric(FILE *f,struct IC *p)
+void pric(FILE *f,IC *p)
 /*  Gibt IC-Liste auf dem Bildschirm aus.             */
 {
   while(p){
@@ -701,12 +703,13 @@ void emitzld(FILE *f,zldouble x)
   emit(f,"fp-constant");
 }
 
-static struct memblock {struct memblock *next;void *p;} *first_mb;
+typedef struct memblock {struct memblock *next;void *p;} memblock;
+static memblock *first_mb;
 
 static void add_mb(void *p)
 {
-  struct memblock *mb_second=first_mb;
-  struct memblock *mb=malloc(sizeof(*mb));
+  memblock *mb_second=first_mb;
+  memblock *mb=malloc(sizeof(*mb));
   if(!mb){
     error(12);
     raus();
@@ -718,8 +721,8 @@ static void add_mb(void *p)
 
 static void remove_mb(void *p)
 {
-  struct memblock *mb_prev=0;
-  struct memblock *mb=first_mb;
+  memblock *mb_prev=0;
+  memblock *mb=first_mb;
   while(mb){
     if(mb->p==p){
       if(mb_prev==0) first_mb=mb->next;
@@ -822,7 +825,7 @@ char *mystrdup(char *p)
 }
 
 /* Testet, ob zwei objs dieselben Register belegen. */
-int collides(struct obj *x,struct obj *y)
+int collides(obj *x,obj *y)
 {
     int x1,x2,y1,y2;
     if(!(x->flags&REG)||!(y->flags&REG)) return 0;
@@ -844,10 +847,10 @@ int collides(struct obj *x,struct obj *y)
 
 /* Versucht, ein IC so zu drehen, dass q2 und z kein gemeinsames */
 /* Register belegen. Liefert Null, wenn das nicht moeglich ist.  */
-int switch_IC(struct IC *p)
+int switch_IC(IC *p)
 {
     int c;
-    struct obj o;
+    obj o;
     if(!collides(&p->q2,&p->z)) return 1;
     c=p->code;
     if((c<OR||c>AND)&&c!=ADD&&c!=MULT&&c!=ADDI2P) return 0;
@@ -857,7 +860,7 @@ int switch_IC(struct IC *p)
     return 1;
 }
 
-void probj(FILE *f,struct obj *p,int t)
+void probj(FILE *f,obj *p,int t)
 /*  Gibt Objekt auf Bildschirm aus.                    */
 {
   if(p->am){ fprintf(f,"[tgt-addressing-mode]");return;}
@@ -900,7 +903,7 @@ void probj(FILE *f,struct obj *p,int t)
   if(p->flags&SCRATCH) fprintf(f,"[S]");
   if(p->flags&DREFOBJ) fprintf(f,")");
 }
-void prl(FILE *o,struct struct_declaration *p)
+void prl(FILE *o,struct_declaration *p)
 /* Gibt eine struct_declaration auf dem Bildschirm aus. */
 {
   int i;
@@ -908,22 +911,22 @@ void prl(FILE *o,struct struct_declaration *p)
   int merk_recurse=recurse;
   --recurse;
 #ifdef HAVE_ECPP
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+  if(p->identifier&&*p->identifier){
+    fprintf(o," ident: %s; ",p->identifier);
+        if(p->mangled_identifier&&*p->mangled_identifier){
+      fprintf(o," mangled_ident: %s; ",p->mangled_identifier);
+    }
+  }
+  if(p->higher_nesting){
+    if(p->higher_nesting->identifier&&*p->higher_nesting->identifier){
+      fprintf(o,"nested in: %s; ",p->higher_nesting->identifier);
+    }
+  }
+  if(p->typ==STRUCT&&p->base_class){
+    if(p->base_class->identifier){
+      fprintf(o,"derived from: %s; ",p->base_class->identifier);
+    }
+  }
 #endif
   for(i=0;i<p->count;i++){
     fprintf(o," %d.:",i);
@@ -934,7 +937,7 @@ void prl(FILE *o,struct struct_declaration *p)
   }
   recurse=merk_recurse;
 }
-void prd(FILE *o,struct Typ *p)
+void prd(FILE *o,type *p)
 /* Gibt einen Typ auf dem Bildschirm aus.    */
 {
   int f;
@@ -964,7 +967,7 @@ void prd(FILE *o,struct Typ *p)
 
   fprintf(o,"%s",typname[f&NQ]);
 }
-void print_var(FILE *o,struct Var *p)
+void print_var(FILE *o,Var *p)
 /* Gibt eine Variable aus. */
 {
   if(p->identifier&&*p->identifier){
@@ -974,7 +977,7 @@ void print_var(FILE *o,struct Var *p)
 }
 
 /* returns the first base Type in an compound type */
-int get_first_base_type(struct Typ *t) 
+int get_first_base_type(type *t) 
 {
   if (!t) return 0;
   if (ISARRAY(t->flags)) {
@@ -1063,10 +1066,10 @@ void eval_const(union atyps *p,int t)
 }
 #endif
 
-struct function_info *new_fi(void)
+function_info *new_fi(void)
 /*  Belegt neue function_info-Struktur und initialisiert sie.  */
 {
-  struct function_info *new;
+  function_info *new;
   new=mymalloc(sizeof(*new));
   new->first_ic=new->last_ic=new->opt_ic=0;
   new->vars=0;
@@ -1077,16 +1080,16 @@ struct function_info *new_fi(void)
   new->call_list=new->use_list=new->change_list=0;
   memset(new->regs_modified,0,sizeof(new->regs_modified));
 #if HAVE_OSEK
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+  bvclear(new->preempt_regs,sizeof(new->preempt_regs));
+  bvclear(new->schedule_regs,sizeof(new->schedule_regs));
+  new->osflags=0;
+
 #endif
   new->stack1=ul2zum(0UL);
   new->stack2=ul2zum(0UL);
   return new;
 }
-void free_fi(struct function_info *p)
+void free_fi(function_info *p)
 /*  Gibt ein function_info mit Inhalt frei.                     */
 {
   if(p->first_ic) free_IC(p->first_ic);
@@ -1100,13 +1103,13 @@ void free_fi(struct function_info *p)
   free(p);
 }
 
-void print_fi(FILE *f,struct function_info *p)
+void print_fi(FILE *f,function_info *p)
 /*  Gibt function_info aus. */
 {
   int i;
   fprintf(f,"function_info:\n");
   if(p->first_ic){
-    struct IC *ic=p->first_ic;
+    IC *ic=p->first_ic;
     fprintf(f," inline_code:\n");
     pric2(f,ic);
     while(ic!=p->last_ic){
@@ -1142,7 +1145,7 @@ void print_fi(FILE *f,struct function_info *p)
     fprintf(f," no side effects\n");
 }
 
-void print_varlist(FILE *f,struct varlist *p,int n)
+void print_varlist(FILE *f,varlist *p,int n)
 {
   int i;
   char *s;
@@ -1152,7 +1155,7 @@ void print_varlist(FILE *f,struct varlist *p,int n)
   }
 }
 
-int is_const(struct Typ *t)
+int is_const(type *t)
 /*  tested, ob ein Typ konstant (und damit evtl. in der Code-Section) ist   */
 {
   if(!(t->flags&(CONST|STRINGCONST))){
@@ -1165,7 +1168,7 @@ int is_const(struct Typ *t)
 }
 
 /* is object volatile? */
-int is_volatile_obj(struct obj *o)
+int is_volatile_obj(obj *o)
 {
   if(o->flags&DREFOBJ){
     if(o->dtyp&VOLATILE)
@@ -1180,7 +1183,7 @@ int is_volatile_obj(struct obj *o)
 }
 
 /* is IC volatile? */
-int is_volatile_ic(struct IC *p)
+int is_volatile_ic(IC *p)
 {
   if(p->q1.flags){
     if(is_volatile_obj(&p->q1)||(q1typ(p)&VOLATILE)) return 1;
@@ -1270,10 +1273,10 @@ void emit_char(FILE *f,int c)
 
 /* detect whether the following code resembles a switch-case-statement */
 /* will return the longest sequence which has at least min_density */
-struct case_table *calc_case_table(struct IC *p,double min_density)
+case_table *calc_case_table(IC *p,double min_density)
 {
-  static struct case_table ct;
-  struct obj *o,*ccr;
+  static case_table ct;
+  obj *o,*ccr;
   static union atyps *vals;
   union atyps min,max;
   zumax diff;
@@ -1352,7 +1355,7 @@ struct case_table *calc_case_table(struct IC *p,double min_density)
 }
 
 /* emit a list of jump-table entries */
-void emit_jump_table(FILE *f,struct case_table *ct,char *da,char *labprefix,int defl)
+void emit_jump_table(FILE *f,case_table *ct,char *da,char *labprefix,int defl)
 {
   unsigned long l,e;
   int i;
@@ -1381,7 +1384,7 @@ void emit_jump_table(FILE *f,struct case_table *ct,char *da,char *labprefix,int 
   }
 }
 /* display warnings if specified stack-size cannot be guaranteed */
-void static_stack_check(struct Var *v)
+void static_stack_check(Var *v)
 {
   /*FIXME*/
 }
@@ -1390,11 +1393,11 @@ void static_stack_check(struct Var *v)
 /* return the offset of the first variable-argument-macro to the
    beginning of the argument-area (i.e. the space occupied by
    normal arguments on the stack */
-zmax va_offset(struct Var *v)
+zmax va_offset(Var *v)
 {
   int i;
   zmax offset=l2zm(0L);
-  struct reg_handle rh=empty_reg_handle;
+  treg_handle rh=empty_reg_handle;
   for(i=0;i<v->vtyp->exact->count;i++){
 #if 0
     if((*v->vtyp->exact->sl)[i].reg!=0)
@@ -1453,7 +1456,7 @@ void vqsort (void *base,size_t nmemb,size_t size,int (*compar)(const void *,cons
 
 /* calculates registers used by this call IC
    returns 0 if not possible */
-int calc_regs(struct IC *p,int showwarnings)
+int calc_regs(IC *p,int showwarnings)
 {
   int i;
   if(p->call_cnt){
@@ -1461,18 +1464,18 @@ int calc_regs(struct IC *p,int showwarnings)
       if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->flags&ALL_REGS)){
         bvunite(regs_modified,p->call_list[i].v->fi->regs_modified,RSIZE);
 #if HAVE_OSEK
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+        bvunite(task_preempt_regs,p->call_list[i].v->fi->preempt_regs,RSIZE);
+        if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->osflags&DOES_BLOCK)){
+          int r;
+          for(r=1;r<=MAXR+1;r++)
+            if(regs[r]&&!regsa[r]) BSET(task_preempt_regs,r);
+        }
+        bvunite(task_schedule_regs,p->call_list[i].v->fi->schedule_regs,RSIZE);
+        if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->osflags&CALLS_SCHED)){
+          int r;
+          for(r=1;r<=MAXR+1;r++)
+            if(regs[r]&&!regsa[r]) BSET(task_schedule_regs,r);
+        }
 #endif
       }else{
         int r;
@@ -1507,7 +1510,7 @@ int bflayout(int bfoffset,int bfsize,int t)
 long get_pof2(zumax x)
 /*  Yields log2(x)+1 oder 0. */
 {
-  zumax p;int ln=1,max=(int)zm2l(zmmult(sizetab[MAXINT],char_bit));
+  zumax p;int ln=1,max=(int)zm2l(zmmult(sizetab[LLONG],char_bit));
   p=ul2zum(1L);
   while(ln<=max&&zumleq(p,x)){
     if(zumeqto(x,p)) return ln;
@@ -1516,184 +1519,262 @@ long get_pof2(zumax x)
   return 0;
 }
 
+/* check if type is a varargs function */
+int is_varargs(type *t)
+{
+  int c;
+  if(t->exact&&(c=t->exact->count)!=0&&(*t->exact->sl)[c-1].styp->flags!=VOID)
+    return 1;
+  else
+    return 0;
+}
+
+/* add string to type- oder variable-aatribute */
+void add_attr(char **attr,char *new)
+{
+  int ln=strlen(new),lo;
+  if(*attr){
+    lo=strlen(*attr);
+    *attr=myrealloc(*attr,lo+ln+2);
+  }else{
+    lo=0;
+    *attr=mymalloc(ln+2);
+  }
+  (*attr)[lo]=';';
+  strcpy(*attr+lo+1,new);
+}
+
+
+hashtable *new_hashtable(size_t size)
+{
+  hashtable *new = mymalloc(sizeof(*new));
+
+  new->size = size;
+  new->collisions = 0;
+  new->entries = mymalloc(size*sizeof(*new->entries));
+  memset(new->entries,0,size*sizeof(*new->entries));
+  return new;
+}
+
+size_t hashcode(char *name)
+{
+  size_t h = 5381;
+  int c;
+
+  while (c = (unsigned char)*name++)
+    h = ((h << 5) + h) + c;
+  return h;
+}
+
+/* add to hashtable; name must be unique */
+void add_hashentry(hashtable *ht,char *name,hashdata data)
+{
+  size_t i=(hashcode(name)%ht->size);
+  hashentry *new=mymalloc(sizeof(*new));
+  new->name=name;
+  new->data=data;
+  if(DEBUG&1){
+    if(ht->entries[i])
+      ht->collisions++;
+  }
+  new->next=ht->entries[i];
+  ht->entries[i]=new;
+}
+
+/* finds unique entry in hashtable */
+hashdata find_name(hashtable *ht,char *name)
+{
+  size_t i=hashcode(name)%ht->size;
+  hashentry *p;
+  for(p=ht->entries[i];p;p=p->next){
+    if(!strcmp(name,p->name)){
+      return p->data;
+    }else
+      ht->collisions++;
+  }
+  return 0;
+}
+
+
+
 #ifdef HAVE_MISRA
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
-/* removed */
+#define MISRA_NUMBER_RESERVED_WORDS 472
+char *misra_reserved[] = {      "__DATE__", "__FILE__" , "__LINE__", "__STDC__", "__STDC_VERSION__",    "__TIME__", "_IOFBF",
+                                                                                                                "_IOLBF", "_IONBF",             /* 9 */
+                                                                                                                "abort", "abs", "acos", "acosf", "acosl", "and", "and_eq", "asctime",
+                                                                                                                "asin", "asinf", "ainl", "asm", "assert", "atan", "atanf", "atanl",
+                                                                                                                "atan2", "atan2f", "atan2l", "atexit", "atof", "atoi", "atol", "auto", /* 24 */
+                                                                                                                "bitand2",  "bitor", "bool", "break", "bsearch", "btowc", "BUFSIZ", /* 7 */
+                                                                                                                "calloc", "case", "catch", "ceil", "ceilf", "ceill", "char", "CHAR_BIT", "CHAR_MAX",
+                                                                                                                "CHAR_MIN", "class", "clearerr", "clock", "clock_t", "CLOCKS_PER_SEC", "compl", "const",
+                                                                                                                "const_cast", "continue", "cos", "cosf", "cosh", "coshf", "coshl", "cosl" , "ctime",
+                                                                                                                "currency_symbol", /* 27 */
+                                                                                                                "DBL_DIG", "DBL_EPSILON", "DBL_MANT_DIG", "DBL_MAX", "DBL_MAX_10_EXP", "DBL_MAX_EXP"
+                                                                                                                "DBL_MIN", "DBL_MIN_10_EXP", "DBL_MIN_EXP", "decimal_point", "default", "defined", 
+                                                                                                                "delete", "difftime", "div", "div_t", "do", "double", "dynamic_cast", /* 19 */ 
+                                                                                                                "EDOM", "EILSEQ", "else", "enum", "EOF", "ERANGE", "errno", "exit", "EXIT_FAILURE", 
+                                                                                                                "EXIT_SUCCESS", "exp", "expf", "expl", "explicit", "export", "extern", /* 16 */ 
+                                                                                                                "fabs", "fabsf", "fabsl", "false", "fclose", "feof", "ferror", "fflush", "fgetc", 
+                                                                                                                "fgetpos", "fgets", "fgetwc", "fgetws", "FILE", "FILENAME_MAX", "float", "floor", 
+                                                                                                                "floorf", "floorl", "FLT_DIG", "FLT_EPSILON", "FLT_MAN_DIG", "FLT_MAX", "FLT_MAX_10_EXP", 
+                                                                                                                "FLT_MAX_EXP", "FLT_MIN", "FLT_MIN_10_EXP", "FLT_MIN_EXP", "FLT_RADIX", "FLT_ROUNDS", 
+                                                                                                                "fmod", "fmodf", "fmodl", "fopen", "FOPEN_MAX", "for", "fpos_t", "fprintf", "fputc", 
+                                                                                                                "fputs", "fputwc", "fputws", "frac_digits", "fread", "free", "freopen", "frexp", 
+                                                                                                                "frexpf", "frexpl", "friend", "fscanf", "fseek", "fsetpos", "ftell", "fwide", "fwprintf", 
+                                                                                                                "fwrite", "fwscanf", /* 58 */
+                                                                                                                "getc", "getchar", "getenv", "gets", "getwc", "getwchar", "gmtime", "goto", "grouping", /*9*/ 
+                                                                                                                "HUGE_VAL", /*1*/
+                                                                                                                "if", "inline", "int", "int_curr_symbol", "int_frac_digits", "INT_MAX", "INT_MIN", 
+                                                                                                                "isalnum", "isalpha", "iscntrl", "isdigit", "isgraph", "islower", "isprint", "ispunct", 
+                                                                                                                "isspace", "isupper", "iswalnum", "iswalpha", "iswcntrl", "iswctype", "iswdigit", 
+                                                                                                                "iswgraph", "iswlower", "iswprint", "iswpunct", "iswspace", "iswupper", "iswxdigit", 
+                                                                                                                "isxdigit", /*30*/
+                                                                                                                "jmp_buf", /*1*/
+                                                                                                                "L_tmpnam", "labs", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY", "LC_NUMERIC", 
+                                                                                                                "LC_TIME", "lconv", "LDBL_DIG", "LDBL_EPSILON", "LDBL_MANT_DIG", "LDBL_MAX", "LDBL_MAX_10_EXP", 
+                                                                                                                "LDBL_MAX_EXP", "LDBL_MIN", "LDBL_MIN_10_EXP", "LDBL_MIN_EXP", "ldexp", "ldexpf", 
+                                                                                                                "ldexpl", "ldiv", "ldiv_t", "localeconv", "localtime", "log", "logf", "logl", "log10", 
+                                                                                                                "log10f", "log10l", "long", "LONG_MAX", "LONG_MIN", "longjmp", /*35*/
+                                                                                                                "malloc", "MB_CUR_MAX", "MB_LEN_MAX", "mblen", "mbrlen", "mbrtowc", "mbsinit", "mbsrtowcs", 
+                                                                                                                "mbstate_t", "mbstowcs", "memchr", "memcmp", "memcpy", "memmove", "memset", "mktime", 
+                                                                                                                "modf", "modff", "modfl", "mon_decimal_point", "mon_grouping", "mon_thousands_sep", 
+                                                                                                                "mutable", /*23*/
+                                                                                                                "n_cs_precedes", "n_sep_by_space", "n_sign_posn", "namespace", "NDEBUG", "negative_sign", 
+                                                                                                                "new", "not", "not_eq", "NULL", /* 10 */ 
+                                                                                                                "offsetof", "operator", "or", "or_eq", /* 4 */
+                                                                                                                "p_cs_precedes", "p_sep_by_space", "p_sign_posn", "perror", "positive_sign", "pow", 
+                                                                                                                "powf", "powl", "printf", "private", "protected", "ptrdiff_t", "public", "putc", 
+                                                                                                                "putchar", "puts", "putwc", "putwchar", /* 18 */
+                                                                                                                "qsort", /* 1 */
+                                                                                                                "raise", "rand", "RAND_MAX", "realloc", "register", "reinterpret_cast", "remove", 
+                                                                                                                "rename", "return", "rewind", /* 10 */ 
+                                                                                                                "scanf", "SCHAR_MAX", "SCHAR_MIN", "SEEK_CUR", "SEEK_END", "SEEK_SET", "setbuf", "setjmp", 
+                                                                                                                "setlocale", "setvbuf", "short", "SHRT_MAX", "SHRT_MIN", "sig_atomic_t", "SIG_DFL", "SIG_ERR", 
+                                                                                                                "SIG_IGN", "SIGABRT", "SIGFPE", "SIGILL", "SIGINT", "signal", "signed", "SIGSEGV", 
+                                                                                                                "SIGTERM", "sin", "sinf", "sinh", "sinhf", "sinhl", "sinl", "size_t", "sizeof", "sprintf", 
+                                                                                                                "sqrt", "sqrtf", "sqrtl", "srand", "sscanf", "static", "static_cast", "stderr", "stdin", 
+                                                                                                                "stdout", "strcat", "strchr", "strcmp", "strcoll", "strcpy", "strcspn", "strerror", "strftime", 
+                                                                                                                "strlen", "strncat", "strncmp", "strncpy", "strpbrk", "strrchr", "strspn", "strstr", 
+                                                                                                                "strtod", "strtok", "strtol", "strtoul", "struct", "strxfrm", "switch", "swprintf", 
+                                                                                                                "swscanf", "system", /* 70 */ 
+                                                                                                                "tan", "tanf", "tanh", "tanhf", "tanhl", "tanl", "template", "this", "thousands_sep", 
+                                                                                                                "throw", "time", "time_t", "tm", "tm_hour", "tm_isdst", "tm_mday", "tm_min", "tm_mon", 
+                                                                                                                "tm_sec", "tm_wday", "tm_yday", "tm_year", "TMP_MAX", "tmpfile", "tmpnam", "tolower", 
+                                                                                                                "toupper", "towctrans", "towlower", "towupper", "true", "try", "typedef", "typeid", 
+                                                                                                                "typename", /* 35 */ 
+                                                                                                                "UCHAR_MAX", "UINT_MAX", "ULONG_MAX", "ungetc", "ungetwc", "union", "unsigned", "USHRT_MAX", 
+                                                                                                                "using", /* 9 */ 
+                                                                                                                "va_arg", "va_end", "va_list", "va_start", "vfprintf", "vfwprintf", "virtual", "void", 
+                                                                                                                "volatile", "vprintf", "vsprintf", "vswprintf", "vwprintf", /* 13 */
+                                                                                                                "WCHAR_MAX", "WCHAR_MIN", "wchar_t", "wcrtomb", "wcscat", "wcschr", "wcscmp", "wcscoll", 
+                                                                                                                "wcscpy", "wcscspn", "wcsftime", "wcslen", "wcsncat", "wcsncmp", "wcsncpy", "wcspbrk", 
+                                                                                                                "wcsrchr", "wcsrtombs", "wcsspn", "wcsstr", "wcstod", "wcstok", "wcstol", "wcstombs", 
+                                                                                                                "wcstoul", "wcsxfrm", "wctob", "wxtomb", "wctrans", "wctrans_t", "wctype", "wctype_t", "WEOF", 
+                                                                                                                "while", "wint_t", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove", "wmemset", "wprintf", "wscanf", /* 42 */ 
+                                                                                                                "xor", "xor_eq" /* 2 */};
+
+
+char *misra_dont_use[] = {  "abort", "asctime",
+                                                                                                                "atof", "atoi",
+                                                                                                                "atol", "calloc",
+                                                                                                                "clearerr", "clock",
+                                                                                                                "ctime", "difftime",
+                                                                                                                "errno", "exit",
+                                                                                                                "fclose", "feof",
+                                                                                                                "ferror", "fflush",
+                                                                                                                "fgetc", "fgetpos",
+                                                                                                                "fgets", "fopen",
+                                                                                                                "fprintf", "fputc", 
+                                                                                                                "fputs", "fread",
+                                                                                                                "free", "freopen",
+                                                                                                                "fscanf", "fseek",
+                                                                                                                "fsetpos", "ftell",
+                                                                                                                "fwrite", "getc",
+                                                                                                                "getchar", "getenv",
+                                                                                                                "gets", "gmtime",
+                                                                                                                "localtime", "longjmp",
+                                                                                                                "malloc", "mktime",
+                                                                                                                "offsetof", "perror",
+                                                                                                                "printf", "putc", 
+                                                                                                                "putchar", "puts",
+                                                                                                                "raise","realloc",
+                                                                                                                "remove", "rename",
+                                                                                                                "rewind", "scanf",
+                                                                                                                "setbuf", "setjmp", 
+                                                                                                                "setvbuf", "signal",
+                                                                                                                "sprintf", "sscanf",
+                                                                                                                "stderr", "stdin", 
+                                                                                                                "stdout", "strftime", 
+                                                                                                          "system", "time",
+                                                                                                                "tmpfile", "tmpnam",
+                                                                                                                "ungetc", "vfprintf",
+                                                                                                                "vprintf", "vsprintf", 
+};
+
+#define MISRA_NUMBER_DONTUSE_WORDS 70
+
+int misra_check_use_warn( const char* checkstr ) {
+        int i;
+        for (i = 0; i < MISRA_NUMBER_DONTUSE_WORDS; i++) {
+                if (!strcmp(misra_reserved[i],checkstr)) return 1;
+        }
+        return 0;
+        
+}
+
+int misra_is_reserved( const char* checkstr ) {
+        int i;
+
+        if (checkstr[0] == '_') return 1;
+        if (checkstr[0] == 'E') {
+                if ( ((checkstr[1] >= '0') && (checkstr[1] <= '9')) ||
+                                 ((checkstr[1] >= 'A') && (checkstr[1] <= 'Z')) ) return 1;
+        }
+        if (!strncmp(checkstr,"is",2)) {
+                if (strlen(checkstr) > 2) {
+                        if ((checkstr[2] >= 'a') && (checkstr[2] <= 'z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"LC_",3)) {
+                if (strlen(checkstr) > 3) {
+                        if ((checkstr[3] >= 'A') && (checkstr[3] <= 'Z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"mem",3)) {
+                if (strlen(checkstr) > 3) {
+                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"SIG_",4)) {
+                if (strlen(checkstr) > 4) {
+                        if ((checkstr[4] >= 'A') && (checkstr[4] <= 'Z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"SIG",3)) {
+                if (strlen(checkstr) > 3) {
+                        if ((checkstr[3] >= 'A') && (checkstr[3] <= 'Z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"str",3)) {
+                if (strlen(checkstr) > 3) {
+                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"to",2)) {
+                if (strlen(checkstr) > 2) {
+                        if ((checkstr[2] >= 'a') && (checkstr[2] <= 'z')) return 1;
+                }
+        }
+        if (!strncmp(checkstr,"wcs",3)) {
+                if (strlen(checkstr) > 3) {
+                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
+                }
+        }
+
+        for (i = 0; i < MISRA_NUMBER_RESERVED_WORDS; i++) {
+                if (!strcmp(misra_reserved[i],checkstr)) return 1;
+        }
+        return 0;
+}
+
 #endif
