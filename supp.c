@@ -1,4 +1,4 @@
-/*  $VER: vbcc (supp.c) $Revision: 1.32 $     */
+/*  $VER: vbcc (supp.c) $Revision: 1.47 $     */
 
 #include "supp.h"
 #include "opt.h"
@@ -73,6 +73,10 @@ int debug_info;
 long inline_size=100;
 long inline_depth=1;
 long unroll_size=200;
+long clist_copy_stack=6;
+long clist_copy_static=6;
+long clist_copy_pointer=20;
+long inline_memcpy_sz=INLINEMEMCPY;
 int fp_assoc,noaliasopt,noitra;
 char *filename;
 IC *first_ic,*last_ic;
@@ -92,6 +96,153 @@ char *emit_p;
 int emit_f,emit_l;
 int no_inline_peephole;
 
+static int get_scalar_byte(int f,union atyps *v,zmax n, zuchar *out)
+/* Yields byte n of a constant */
+{
+  if(!zmleq(l2zm(0L),n)) ierror(0);
+  f&=NQ;
+  if(f>=CHAR&&f<=LLONG){
+    int j;
+    eval_const(v,f);
+    if(LITTLEENDIAN)
+      j=zm2l(n);
+    else
+      j=(int)sizetab[f]-(int)zm2l(n)-1;
+    while(j){
+      vumax=zumrshift(vumax,char_bit);
+      j--;
+    }
+    *out=zum2zuc(vumax);
+    return 1;
+  }else
+    return 0;
+}
+
+zumax get_clist_int(type *t, const_list *cl, zmax n, int sz,int *state)
+/* yields an integer of size sz from offset n */
+{
+  zuchar zuc;
+  zumax val = ZU0;
+
+  if(LITTLEENDIAN)
+    n=zmadd(n,l2zm((long)(sz-1)));
+  
+  while(sz){
+    val=zumlshift(val,char_bit);
+    if(!get_clist_byte(t,cl,n,&zuc)) {*state=0;return ZU0;}
+    val=zumadd(val,zuc2zum(zuc));
+    sz--;
+    n=LITTLEENDIAN?zmsub(n,Z1):zmadd(n,Z1);
+  }
+  *state=1;
+  return val;
+}
+
+int get_clist_byte(type *t,const_list *cl, zmax n, zuchar *out)
+/* Yields byte n from a const list */
+{
+  if(!cl){
+    *out=zum2zuc(ul2zum(0UL));
+    return 1;
+  }
+
+  if(ISARRAY(t->flags)){
+    zmax i,j,x;
+    x=szof(t->next);
+    i=zmdiv(n,x);
+    while(1){
+      if(!cl) break;
+      if(zmleq(i,cl->idx)) break;
+      cl=cl->next;
+    }
+    if(!cl||!zmeqto(cl->idx,i)){
+      *out=zum2zuc(ul2zum(0UL));
+      return 1;
+    }
+    return get_clist_byte(t->next,cl->other,zmmod(n,x),out);
+  }
+  if(ISUNION(t->flags)){
+    int i=zm2l(cl->idx);
+    if(cl->tree) return 0;
+    return get_clist_byte((*t->exact->sl)[i].styp,cl->other,n,out);
+  }
+  if(ISSTRUCT(t->flags)){
+    zmax al;int fl;type *st;
+    int i,bfo,bfs;zmax sz;zumax bfval=ul2zum(0UL);
+
+    sz=l2zm(0L);
+    if(cl&&cl->tree){
+      /* initialized by another */
+      return 0;
+    }else{
+      for(i=0;i<t->exact->count&&cl;i++){
+	if(!cl->other){ierror(0);}
+	st=(*t->exact->sl)[i].styp;
+	al=(*t->exact->sl)[i].align;
+	if(!(*t->exact->sl)[i].identifier) ierror(0);
+	bfo=(*t->exact->sl)[i].bfoffset;
+	if(!zmeqto(zmmod(sz,al),l2zm(0L))){
+	  sz=zmadd(sz,zmsub(al,zmmod(sz,al)));
+	  if(!zmleq(sz,n)){
+	    *out=zum2zuc(ul2zum(0L));
+	    return 1;
+	  }
+	}
+	if(bfo>=0){
+	  /* bitfield */
+
+	  if((*t->exact->sl)[i].identifier[0]){
+	    bfs=(*t->exact->sl)[i].bfsize;
+	    if(zmeqto(l2zm((long)i),cl->idx)){
+	      eval_const(&cl->other->val,st->flags);
+	      cl=cl->next;
+	    }else{
+	      vumax=ul2zum(0UL);
+	    }
+	    vumax=zumand(vumax,zumsub(zumlshift(ul2zum(1UL),ul2zum((unsigned long)bfs)),ul2zum(1UL)));
+	    bfval=zumor(bfval,zumlshift(vumax,ul2zum((unsigned long)bflayout(bfo,bfs,st->flags))));
+	  }          
+	  if(i+1>=t->exact->count||(*t->exact->sl)[i+1].bfoffset<=0||!cl){
+	    /* last bitfield in integer */
+	    gval.vumax=bfval;
+	    eval_const(&gval,UNSIGNED|MAXINT);
+	    insert_const(&gval,st->flags&NU);
+	    bfval=ul2zum(0L);
+	    sz=zmadd(sz,szof(st));
+	    if(!zmleq(sz,n))
+	      return get_scalar_byte(st->flags,&gval,zmsub(n,zmsub(sz,szof(st))),out);
+	  }
+	}else{
+	  sz=zmadd(sz,szof(st));
+	  if(!zmleq(sz,n)){
+	    if(zmeqto(l2zm((long)i),cl->idx)){
+	      return get_clist_byte(st,cl->other,zmsub(n,zmsub(sz,szof(st))),out);
+	    }else{
+	      *out=zum2zuc(ul2zum(0UL));
+	      return 1;
+	    }
+	  }
+	  if(zmeqto(l2zm((long)i),cl->idx))
+	    cl=cl->next;
+	}
+      }
+    }
+    *out=zum2zuc(ul2zum(0UL));
+    return 1;
+  }
+
+  if(zmeqto(cl->idx,l2zm(-1L)))
+    return 0;
+  else{
+    if(cl->tree)
+      return 0;
+    else
+      return get_scalar_byte(t->flags,&cl->val,n,out);
+
+  }
+  ierror(0);
+}
+
 type *new_typ(void)
 /*  Erzeigt neuen (leeren) Typ.  */
 {
@@ -103,7 +254,7 @@ type *new_typ(void)
   new->dsize=0;
   new->reg=0;
 #ifdef HAVE_ECPP
-  new->ecpp_flags=0;
+/* removed */
 #endif
   return new;
 }
@@ -189,12 +340,19 @@ IC *clone_ic(IC *p)
     new=mymalloc(sizeof(*new));
     *new=*p;
     p->copy=new;
+
+    if(p->q1.am||p->q2.am||p->z.am) ierror(0);
     
     if(new->code==CALL){
       int i;
       new->arg_list=mymalloc(sizeof(*new->arg_list)*new->arg_cnt);
-      for(i=0;i<new->arg_cnt;i++)
+      for(i=0;i<new->arg_cnt;i++){
+	if(!p->arg_list[i])
+	  ierror(0);
+	if(!p->arg_list[i]->copy)
+	  ierror(0);
         new->arg_list[i]=p->arg_list[i]->copy;
+      }
     }
     new->prev=last;
     new->next=0;
@@ -214,6 +372,9 @@ void free_IC(IC *p)
     /*if(p->q1.am&&!p->q1.flags) ierror(0);
     if(p->q2.am&&!p->q2.flags) ierror(0);
     if(p->z.am&&!p->z.flags) ierror(0);*/
+
+    if(p->q1.am&&p->q1.am==p->q2.am)
+      ierror(0);
 
     if(p->q1.am) free(p->q1.am);
     if(p->q2.am) free(p->q2.am);
@@ -395,7 +556,7 @@ zmax szof(type *t)
 {
   int i=t->flags&NQ,j;zmax size,m;
 #ifdef HAVE_ECPP
-  if(ecpp&&ISFUNC(t->flags))return l2zm(0L);
+/* removed */
 #endif
 
   if(ISSCALAR(i)) return sizetab[i];
@@ -423,24 +584,31 @@ zmax szof(type *t)
   if(ISSTRUCT(i)){
     size=l2zm(0L);
 #ifdef HAVE_ECPP
-    if(ecpp&&t->exact->base_class){
-      type* t2=new_typ();
-      t2->flags=STRUCT;
-      t2->exact=t->exact->base_class;
-      size=zmadd(size,szof(t2));
-      freetyp(t2);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     for(j=0;j<t->exact->count;j++){
       type *h=(*t->exact->sl)[j].styp;
       if((*t->exact->sl)[j].bfoffset<=0){
-        m=(*t->exact->sl)[j].align;
+	int n;size_t al;
+        al=(*t->exact->sl)[j].align;
 #ifdef HAVE_ECPP
-        if(ecpp&&zmeqto(m,l2zm(0L)))continue;
+/* removed */
 #endif
-        if(zmeqto(m,l2zm(0L))) {prd(stdout,h);ierror(0);}
-        size=zmmult(zmdiv(zmadd(size,zmsub(m,l2zm(1L))),m),m);
+        if(zmeqto(al,l2zm(0L))) {prd(stdout,h);ierror(0);}
         m=szof(h);
+	/* find the largest type in a bitfield */
+	for(n=j+1;n<t->exact->count&&(*t->exact->sl)[n].bfoffset>0;n++){
+	  size_t tmp=szof((*t->exact->sl)[n].styp);
+	  if(zmleq(m,tmp))
+	    m=tmp;
+	}
+        size=zmmult(zmdiv(zmadd(size,zmsub(al,l2zm(1L))),al),al);
         /*if(zmeqto(m,l2zm(0L))) return l2zm(0L);*/
         size=zmadd(size,m);
       }
@@ -471,38 +639,38 @@ zmax struct_offset(struct_declaration *sd,const char *identifier)
   return offset;
 }
 #ifdef HAVE_ECPP
-zmax ecpp_struct_offset(struct_declaration *sd,const char *identifier,struct_declaration *sd2)
-/* e.g. when looking for offset of "B b; b.A::x;", where A is base of B: sd=B,id=x,sd2=A */
-{
-  int i=0,intbitfield=-1;zmax offset=l2zm(0),al;int done=0;
-  zmax base_offset=l2zm(0);
-  /* FIXME: is alignment handling really correct? */
-  if(sd2)while(sd!=sd2)sd=sd->base_class;
-  if(sd->base_class)base_offset=ecpp_struct_offset(sd->base_class,identifier,0);
-  if(!sd2&&sd->ecpp_flags&ECPP_VIRTUAL)i=1; /* skip vtable pointer of bases */
-  for(;;){
-    if(i>=sd->count)break;
-    if(sd2&&!strcmp((*sd->sl)[i].identifier,identifier))break;
-    if((*sd->sl)[i].bfoffset>=0){
-      if(i+1<sd->count&&(*sd->sl)[i+1].bfoffset>0){
-        i++;
-        continue;
-      }
-    }
-    al=(*sd->sl)[i].align;
-    if(zmeqto(al,l2zm(0L))){i++;continue;}
-    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
-    offset=zmadd(offset,szof((*sd->sl)[i].styp));
-    i++;
-  }
-  offset=zmadd(offset,base_offset);
-  if(sd==sd2){
-    if(i>=sd->count) {error(23,identifier);return l2zm(0L);}
-    al=(*sd->sl)[i].align;
-    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
-  }
-  return offset;
-}
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 #endif
 
@@ -603,14 +771,16 @@ void pric2(FILE *f,IC *p)
       for(i=0;i<p->call_cnt;i++)
         fprintf(f," %s",p->call_list[i].v->identifier);
     }
+    
   }
+  if(p->flags&EFF_IC) fprintf(f," (eff_ic)");
   fprintf(f,"\n");
 #if 0
   if(p->code==CALL){
     int i;
-fprintf(f,"c=%p\n",p);
+    //fprintf(f,"c=%p\n",p);
     for(i=0;i<p->arg_cnt;i++){
-fprintf(f,"%p!\n",p->arg_list[i]);
+      //fprintf(f,"%p!\n",p->arg_list[i]);
       fprintf(f,"%02d:",i);
       pric2(f,p->arg_list[i]);
     }
@@ -868,13 +1038,15 @@ void probj(FILE *f,obj *p,int t)
     fprintf(f,"([");
     if(p->dtyp&CONST) fprintf(f,"const ");
     if(p->dtyp&VOLATILE) fprintf(f,"volatile ");
+    if(p->dtyp&PVOLATILE) fprintf(f,"pvolatile ");
     fprintf(f,"%s]",typname[p->dtyp&NQ]);
   }
   if(p->flags&VARADR) fprintf(f,"#");
   if(p->flags&VAR) {
-    printval(f,&p->val,MAXINT);
+    if(!(p->flags&REG))
+      printval(f,&p->val,MAXINT);
     if(p->flags&REG){
-        fprintf(f,"+%s",regnames[p->reg]);
+        fprintf(f,"%s",regnames[p->reg]);
     }else if(p->v->storage_class==AUTO||p->v->storage_class==REGISTER){
         fprintf(f,"+%ld(FP)", zm2l(p->v->offset));
     }else{
@@ -911,22 +1083,22 @@ void prl(FILE *o,struct_declaration *p)
   int merk_recurse=recurse;
   --recurse;
 #ifdef HAVE_ECPP
-  if(p->identifier&&*p->identifier){
-    fprintf(o," ident: %s; ",p->identifier);
-        if(p->mangled_identifier&&*p->mangled_identifier){
-      fprintf(o," mangled_ident: %s; ",p->mangled_identifier);
-    }
-  }
-  if(p->higher_nesting){
-    if(p->higher_nesting->identifier&&*p->higher_nesting->identifier){
-      fprintf(o,"nested in: %s; ",p->higher_nesting->identifier);
-    }
-  }
-  if(p->typ==STRUCT&&p->base_class){
-    if(p->base_class->identifier){
-      fprintf(o,"derived from: %s; ",p->base_class->identifier);
-    }
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   for(i=0;i<p->count;i++){
     fprintf(o," %d.:",i);
@@ -1080,13 +1252,15 @@ function_info *new_fi(void)
   new->call_list=new->use_list=new->change_list=0;
   memset(new->regs_modified,0,sizeof(new->regs_modified));
 #if HAVE_OSEK
-  bvclear(new->preempt_regs,sizeof(new->preempt_regs));
-  bvclear(new->schedule_regs,sizeof(new->schedule_regs));
-  new->osflags=0;
-
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   new->stack1=ul2zum(0UL);
   new->stack2=ul2zum(0UL);
+  new->inline_size=-1;
+  new->inline_depth=0;
   return new;
 }
 void free_fi(function_info *p)
@@ -1171,15 +1345,18 @@ int is_const(type *t)
 int is_volatile_obj(obj *o)
 {
   if(o->flags&DREFOBJ){
-    if(o->dtyp&VOLATILE)
+    if(o->dtyp&(VOLATILE|PVOLATILE)){
       return 1;
-    if((o->flags&VAR)&&ISPOINTER(o->v->vtyp->flags)&&(o->v->vtyp->next->flags&VOLATILE))
+    }
+    if((o->flags&VAR)&&ISPOINTER(o->v->vtyp->flags)&&(o->v->vtyp->next->flags&VOLATILE)){
       return 1;
+    }
   }
-  if(o->flags&VAR)
+  if(o->flags&VAR){
     return o->v->vtyp->flags&VOLATILE;
-  else
+  }else{
     return 0;
+  }
 }
 
 /* is IC volatile? */
@@ -1296,7 +1473,7 @@ case_table *calc_case_table(IC *p,double min_density)
     max.vmax=t_min(MAXINT);
     min.vmax=t_max(MAXINT);
   }
-  while(p&&p->code==COMPARE&&(p->q2.flags&KONST)&&p->typf==t&&!compare_objs(o,&p->q1,t)){
+  while(p&&p->code==COMPARE&&(p->q2.flags&KONST)&&p->typf==t&&objs_equal(o,&p->q1,t)){
     zumax zum;zmax zm;
     if(multiple_ccs) ccr=&p->z;
     if(num>=cur_size){
@@ -1312,7 +1489,7 @@ case_table *calc_case_table(IC *p,double min_density)
     vals[num]=p->q2.val;
     p=p->next;
     while(p&&(p->code==NOP||p->code==ALLOCREG||p->code==FREEREG)) p=p->next;
-    if(p->code!=BEQ||(multiple_ccs&&compare_objs(ccr,&p->q1,0))) break;
+    if(p->code!=BEQ||(multiple_ccs&&!objs_equal(ccr,&p->q1,0))) break;
     labels[num]=p->typf;
     p=p->next;
     while(p&&(p->code==NOP||p->code==ALLOCREG||p->code==FREEREG)) p=p->next;
@@ -1397,7 +1574,15 @@ zmax va_offset(Var *v)
 {
   int i;
   zmax offset=l2zm(0L);
+  static type rp={0};
   treg_handle rh=empty_reg_handle;
+  if((v->vtyp->next->flags&NQ)!=VOID&&!freturn(v->vtyp->next)){
+    rp.next=v->vtyp->next;
+    rp.flags=POINTER_TYPE(v->vtyp->next);
+    if(!reg_parm(&rh,&rp,0,v->vtyp)){
+      ierror(0);
+    }
+  }
   for(i=0;i<v->vtyp->exact->count;i++){
 #if 0
     if((*v->vtyp->exact->sl)[i].reg!=0)
@@ -1464,18 +1649,18 @@ int calc_regs(IC *p,int showwarnings)
       if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->flags&ALL_REGS)){
         bvunite(regs_modified,p->call_list[i].v->fi->regs_modified,RSIZE);
 #if HAVE_OSEK
-        bvunite(task_preempt_regs,p->call_list[i].v->fi->preempt_regs,RSIZE);
-        if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->osflags&DOES_BLOCK)){
-          int r;
-          for(r=1;r<=MAXR+1;r++)
-            if(regs[r]&&!regsa[r]) BSET(task_preempt_regs,r);
-        }
-        bvunite(task_schedule_regs,p->call_list[i].v->fi->schedule_regs,RSIZE);
-        if(p->call_list[i].v->fi&&(p->call_list[i].v->fi->osflags&CALLS_SCHED)){
-          int r;
-          for(r=1;r<=MAXR+1;r++)
-            if(regs[r]&&!regsa[r]) BSET(task_schedule_regs,r);
-        }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       }else{
         int r;
@@ -1532,7 +1717,9 @@ int is_varargs(type *t)
 /* add string to type- oder variable-aatribute */
 void add_attr(char **attr,char *new)
 {
-  int ln=strlen(new),lo;
+  int ln,lo;
+  if(!new) return;
+  ln=strlen(new);
   if(*attr){
     lo=strlen(*attr);
     *attr=myrealloc(*attr,lo+ln+2);
@@ -1595,186 +1782,228 @@ hashdata find_name(hashtable *ht,char *name)
   return 0;
 }
 
+#ifndef CHARBACK
+unsigned char CHARBACK(unsigned char x)
+{
+  static unsigned char tab[256],init=0;
+  if(!init){
+    int i,j;
+    for(i=0;i<256;i++)
+      for(j=0;j<256;j++)
+	if(tab[j]==0&&CHARCONV(i)==j){
+	  tab[j&255]=i;
+	  break;
+	}
+    init=1;
+  }
+  return tab[x&255];
+}
+
+void STRBACK(unsigned char *p)
+{
+  while(p&&*p){
+    *p=CHARBACK(*p);
+    p++;
+  }
+}
+#endif
+
+int objs_equal(obj *o1,obj *o2,int t)
+/*  Vergleicht die beiden Objekte; liefert 1, wenn sie gleich sind, sonst 0 */
+{
+    int i1,i2;
+    i1=o1->flags&~SCRATCH;i2=o2->flags&~SCRATCH;
+    if(i1!=i2) return 0;
+    if(i1&DREFOBJ){
+      if(o1->dtyp!=o2->dtyp) return 0;
+    }
+    if(i1&KONST) return(!compare_const(&o1->val,&o2->val,t));
+    if(i1&VAR){
+      if(o1->v!=o2->v) return 0;
+      if(!zmeqto(o1->val.vmax,o2->val.vmax)) return 0;
+    }
+    return 1;
+}
 
 
 #ifdef HAVE_MISRA
-#define MISRA_NUMBER_RESERVED_WORDS 472
-char *misra_reserved[] = {      "__DATE__", "__FILE__" , "__LINE__", "__STDC__", "__STDC_VERSION__",    "__TIME__", "_IOFBF",
-                                                                                                                "_IOLBF", "_IONBF",             /* 9 */
-                                                                                                                "abort", "abs", "acos", "acosf", "acosl", "and", "and_eq", "asctime",
-                                                                                                                "asin", "asinf", "ainl", "asm", "assert", "atan", "atanf", "atanl",
-                                                                                                                "atan2", "atan2f", "atan2l", "atexit", "atof", "atoi", "atol", "auto", /* 24 */
-                                                                                                                "bitand2",  "bitor", "bool", "break", "bsearch", "btowc", "BUFSIZ", /* 7 */
-                                                                                                                "calloc", "case", "catch", "ceil", "ceilf", "ceill", "char", "CHAR_BIT", "CHAR_MAX",
-                                                                                                                "CHAR_MIN", "class", "clearerr", "clock", "clock_t", "CLOCKS_PER_SEC", "compl", "const",
-                                                                                                                "const_cast", "continue", "cos", "cosf", "cosh", "coshf", "coshl", "cosl" , "ctime",
-                                                                                                                "currency_symbol", /* 27 */
-                                                                                                                "DBL_DIG", "DBL_EPSILON", "DBL_MANT_DIG", "DBL_MAX", "DBL_MAX_10_EXP", "DBL_MAX_EXP"
-                                                                                                                "DBL_MIN", "DBL_MIN_10_EXP", "DBL_MIN_EXP", "decimal_point", "default", "defined", 
-                                                                                                                "delete", "difftime", "div", "div_t", "do", "double", "dynamic_cast", /* 19 */ 
-                                                                                                                "EDOM", "EILSEQ", "else", "enum", "EOF", "ERANGE", "errno", "exit", "EXIT_FAILURE", 
-                                                                                                                "EXIT_SUCCESS", "exp", "expf", "expl", "explicit", "export", "extern", /* 16 */ 
-                                                                                                                "fabs", "fabsf", "fabsl", "false", "fclose", "feof", "ferror", "fflush", "fgetc", 
-                                                                                                                "fgetpos", "fgets", "fgetwc", "fgetws", "FILE", "FILENAME_MAX", "float", "floor", 
-                                                                                                                "floorf", "floorl", "FLT_DIG", "FLT_EPSILON", "FLT_MAN_DIG", "FLT_MAX", "FLT_MAX_10_EXP", 
-                                                                                                                "FLT_MAX_EXP", "FLT_MIN", "FLT_MIN_10_EXP", "FLT_MIN_EXP", "FLT_RADIX", "FLT_ROUNDS", 
-                                                                                                                "fmod", "fmodf", "fmodl", "fopen", "FOPEN_MAX", "for", "fpos_t", "fprintf", "fputc", 
-                                                                                                                "fputs", "fputwc", "fputws", "frac_digits", "fread", "free", "freopen", "frexp", 
-                                                                                                                "frexpf", "frexpl", "friend", "fscanf", "fseek", "fsetpos", "ftell", "fwide", "fwprintf", 
-                                                                                                                "fwrite", "fwscanf", /* 58 */
-                                                                                                                "getc", "getchar", "getenv", "gets", "getwc", "getwchar", "gmtime", "goto", "grouping", /*9*/ 
-                                                                                                                "HUGE_VAL", /*1*/
-                                                                                                                "if", "inline", "int", "int_curr_symbol", "int_frac_digits", "INT_MAX", "INT_MIN", 
-                                                                                                                "isalnum", "isalpha", "iscntrl", "isdigit", "isgraph", "islower", "isprint", "ispunct", 
-                                                                                                                "isspace", "isupper", "iswalnum", "iswalpha", "iswcntrl", "iswctype", "iswdigit", 
-                                                                                                                "iswgraph", "iswlower", "iswprint", "iswpunct", "iswspace", "iswupper", "iswxdigit", 
-                                                                                                                "isxdigit", /*30*/
-                                                                                                                "jmp_buf", /*1*/
-                                                                                                                "L_tmpnam", "labs", "LC_ALL", "LC_COLLATE", "LC_CTYPE", "LC_MONETARY", "LC_NUMERIC", 
-                                                                                                                "LC_TIME", "lconv", "LDBL_DIG", "LDBL_EPSILON", "LDBL_MANT_DIG", "LDBL_MAX", "LDBL_MAX_10_EXP", 
-                                                                                                                "LDBL_MAX_EXP", "LDBL_MIN", "LDBL_MIN_10_EXP", "LDBL_MIN_EXP", "ldexp", "ldexpf", 
-                                                                                                                "ldexpl", "ldiv", "ldiv_t", "localeconv", "localtime", "log", "logf", "logl", "log10", 
-                                                                                                                "log10f", "log10l", "long", "LONG_MAX", "LONG_MIN", "longjmp", /*35*/
-                                                                                                                "malloc", "MB_CUR_MAX", "MB_LEN_MAX", "mblen", "mbrlen", "mbrtowc", "mbsinit", "mbsrtowcs", 
-                                                                                                                "mbstate_t", "mbstowcs", "memchr", "memcmp", "memcpy", "memmove", "memset", "mktime", 
-                                                                                                                "modf", "modff", "modfl", "mon_decimal_point", "mon_grouping", "mon_thousands_sep", 
-                                                                                                                "mutable", /*23*/
-                                                                                                                "n_cs_precedes", "n_sep_by_space", "n_sign_posn", "namespace", "NDEBUG", "negative_sign", 
-                                                                                                                "new", "not", "not_eq", "NULL", /* 10 */ 
-                                                                                                                "offsetof", "operator", "or", "or_eq", /* 4 */
-                                                                                                                "p_cs_precedes", "p_sep_by_space", "p_sign_posn", "perror", "positive_sign", "pow", 
-                                                                                                                "powf", "powl", "printf", "private", "protected", "ptrdiff_t", "public", "putc", 
-                                                                                                                "putchar", "puts", "putwc", "putwchar", /* 18 */
-                                                                                                                "qsort", /* 1 */
-                                                                                                                "raise", "rand", "RAND_MAX", "realloc", "register", "reinterpret_cast", "remove", 
-                                                                                                                "rename", "return", "rewind", /* 10 */ 
-                                                                                                                "scanf", "SCHAR_MAX", "SCHAR_MIN", "SEEK_CUR", "SEEK_END", "SEEK_SET", "setbuf", "setjmp", 
-                                                                                                                "setlocale", "setvbuf", "short", "SHRT_MAX", "SHRT_MIN", "sig_atomic_t", "SIG_DFL", "SIG_ERR", 
-                                                                                                                "SIG_IGN", "SIGABRT", "SIGFPE", "SIGILL", "SIGINT", "signal", "signed", "SIGSEGV", 
-                                                                                                                "SIGTERM", "sin", "sinf", "sinh", "sinhf", "sinhl", "sinl", "size_t", "sizeof", "sprintf", 
-                                                                                                                "sqrt", "sqrtf", "sqrtl", "srand", "sscanf", "static", "static_cast", "stderr", "stdin", 
-                                                                                                                "stdout", "strcat", "strchr", "strcmp", "strcoll", "strcpy", "strcspn", "strerror", "strftime", 
-                                                                                                                "strlen", "strncat", "strncmp", "strncpy", "strpbrk", "strrchr", "strspn", "strstr", 
-                                                                                                                "strtod", "strtok", "strtol", "strtoul", "struct", "strxfrm", "switch", "swprintf", 
-                                                                                                                "swscanf", "system", /* 70 */ 
-                                                                                                                "tan", "tanf", "tanh", "tanhf", "tanhl", "tanl", "template", "this", "thousands_sep", 
-                                                                                                                "throw", "time", "time_t", "tm", "tm_hour", "tm_isdst", "tm_mday", "tm_min", "tm_mon", 
-                                                                                                                "tm_sec", "tm_wday", "tm_yday", "tm_year", "TMP_MAX", "tmpfile", "tmpnam", "tolower", 
-                                                                                                                "toupper", "towctrans", "towlower", "towupper", "true", "try", "typedef", "typeid", 
-                                                                                                                "typename", /* 35 */ 
-                                                                                                                "UCHAR_MAX", "UINT_MAX", "ULONG_MAX", "ungetc", "ungetwc", "union", "unsigned", "USHRT_MAX", 
-                                                                                                                "using", /* 9 */ 
-                                                                                                                "va_arg", "va_end", "va_list", "va_start", "vfprintf", "vfwprintf", "virtual", "void", 
-                                                                                                                "volatile", "vprintf", "vsprintf", "vswprintf", "vwprintf", /* 13 */
-                                                                                                                "WCHAR_MAX", "WCHAR_MIN", "wchar_t", "wcrtomb", "wcscat", "wcschr", "wcscmp", "wcscoll", 
-                                                                                                                "wcscpy", "wcscspn", "wcsftime", "wcslen", "wcsncat", "wcsncmp", "wcsncpy", "wcspbrk", 
-                                                                                                                "wcsrchr", "wcsrtombs", "wcsspn", "wcsstr", "wcstod", "wcstok", "wcstol", "wcstombs", 
-                                                                                                                "wcstoul", "wcsxfrm", "wctob", "wxtomb", "wctrans", "wctrans_t", "wctype", "wctype_t", "WEOF", 
-                                                                                                                "while", "wint_t", "wmemchr", "wmemcmp", "wmemcpy", "wmemmove", "wmemset", "wprintf", "wscanf", /* 42 */ 
-                                                                                                                "xor", "xor_eq" /* 2 */};
-
-
-char *misra_dont_use[] = {  "abort", "asctime",
-                                                                                                                "atof", "atoi",
-                                                                                                                "atol", "calloc",
-                                                                                                                "clearerr", "clock",
-                                                                                                                "ctime", "difftime",
-                                                                                                                "errno", "exit",
-                                                                                                                "fclose", "feof",
-                                                                                                                "ferror", "fflush",
-                                                                                                                "fgetc", "fgetpos",
-                                                                                                                "fgets", "fopen",
-                                                                                                                "fprintf", "fputc", 
-                                                                                                                "fputs", "fread",
-                                                                                                                "free", "freopen",
-                                                                                                                "fscanf", "fseek",
-                                                                                                                "fsetpos", "ftell",
-                                                                                                                "fwrite", "getc",
-                                                                                                                "getchar", "getenv",
-                                                                                                                "gets", "gmtime",
-                                                                                                                "localtime", "longjmp",
-                                                                                                                "malloc", "mktime",
-                                                                                                                "offsetof", "perror",
-                                                                                                                "printf", "putc", 
-                                                                                                                "putchar", "puts",
-                                                                                                                "raise","realloc",
-                                                                                                                "remove", "rename",
-                                                                                                                "rewind", "scanf",
-                                                                                                                "setbuf", "setjmp", 
-                                                                                                                "setvbuf", "signal",
-                                                                                                                "sprintf", "sscanf",
-                                                                                                                "stderr", "stdin", 
-                                                                                                                "stdout", "strftime", 
-                                                                                                          "system", "time",
-                                                                                                                "tmpfile", "tmpnam",
-                                                                                                                "ungetc", "vfprintf",
-                                                                                                                "vprintf", "vsprintf", 
-};
-
-#define MISRA_NUMBER_DONTUSE_WORDS 70
-
-int misra_check_use_warn( const char* checkstr ) {
-        int i;
-        for (i = 0; i < MISRA_NUMBER_DONTUSE_WORDS; i++) {
-                if (!strcmp(misra_reserved[i],checkstr)) return 1;
-        }
-        return 0;
-        
-}
-
-int misra_is_reserved( const char* checkstr ) {
-        int i;
-
-        if (checkstr[0] == '_') return 1;
-        if (checkstr[0] == 'E') {
-                if ( ((checkstr[1] >= '0') && (checkstr[1] <= '9')) ||
-                                 ((checkstr[1] >= 'A') && (checkstr[1] <= 'Z')) ) return 1;
-        }
-        if (!strncmp(checkstr,"is",2)) {
-                if (strlen(checkstr) > 2) {
-                        if ((checkstr[2] >= 'a') && (checkstr[2] <= 'z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"LC_",3)) {
-                if (strlen(checkstr) > 3) {
-                        if ((checkstr[3] >= 'A') && (checkstr[3] <= 'Z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"mem",3)) {
-                if (strlen(checkstr) > 3) {
-                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"SIG_",4)) {
-                if (strlen(checkstr) > 4) {
-                        if ((checkstr[4] >= 'A') && (checkstr[4] <= 'Z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"SIG",3)) {
-                if (strlen(checkstr) > 3) {
-                        if ((checkstr[3] >= 'A') && (checkstr[3] <= 'Z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"str",3)) {
-                if (strlen(checkstr) > 3) {
-                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"to",2)) {
-                if (strlen(checkstr) > 2) {
-                        if ((checkstr[2] >= 'a') && (checkstr[2] <= 'z')) return 1;
-                }
-        }
-        if (!strncmp(checkstr,"wcs",3)) {
-                if (strlen(checkstr) > 3) {
-                        if ((checkstr[3] >= 'a') && (checkstr[3] <= 'z')) return 1;
-                }
-        }
-
-        for (i = 0; i < MISRA_NUMBER_RESERVED_WORDS; i++) {
-                if (!strcmp(misra_reserved[i],checkstr)) return 1;
-        }
-        return 0;
-}
-
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif

@@ -1,4 +1,4 @@
-/*  $VER: vbcc (rd.c) $Revision: 1.6 $    */
+/*  $VER: vbcc (rd.c) $Revision: 1.16 $    */
 /*  reaching definitions and constant propagation   */
 
 #include "opt.h"
@@ -151,6 +151,11 @@ void num_defs(void)
   }
   
   if(DEBUG&2048){
+    for(i=0;i<vcount;i++){
+      printf("var_defs for var %i %s(%p):\n",i,vilist[i]->identifier,vilist[i]);
+      print_rd(var_defs[i]);
+    }
+	
     for(i=1;i<=dcount;i++){
       printf("Def%3d: ",i);pric2(stdout,dlist[i]);
       printf(" kills:\n");
@@ -309,6 +314,8 @@ void calc(int c,int t,union atyps *q1,union atyps *q2,union atyps *z,IC *p)
   }
   if(c==ADD){ vldouble=zldadd(d1,d2);vmax=zmadd(l1,l2);vumax=zumadd(u1,u2);}
   if(c==SUB){ vldouble=zldsub(d1,d2);vmax=zmsub(l1,l2);vumax=zumsub(u1,u2);}
+  if(c==ADDI2P){ vmax=zmadd(l1,l2);vumax=zumadd(u1,u2);}
+  if(c==SUBIFP){ vmax=zmsub(l1,l2);vumax=zumsub(u1,u2);}
   if(c==MULT){ vldouble=zldmult(d1,d2);vmax=zmmult(l1,l2);vumax=zummult(u1,u2);}
   if(c==DIV||c==MOD){
     if(zldeqto(d2,d2zld(0.0))&&zmeqto(l2,l2zm(0L))&&zumeqto(u2,ul2zum(0UL))){
@@ -343,7 +350,7 @@ void calc(int c,int t,union atyps *q1,union atyps *q2,union atyps *z,IC *p)
     gval.vmax=vmax;
     eval_const(&gval,MAXINT);
   }
-  /*FIXME: use this?  if(p) t=ztyp(p);*/
+  if(p) t=ztyp(p);
   insert_const(z,t);
 }
 
@@ -353,7 +360,7 @@ int fold(IC *p)
   int c;
   if(!p) ierror(0);
   c=p->code;
-  if(c==ADDI2P||c==SUBIFP||c==SUBPFP||c==ASSIGN||c==PUSH||c==SETRETURN) return 0;
+  if(c==SUBPFP||c==ASSIGN||c==PUSH||c==SETRETURN) return 0;
   if(DEBUG&1024) {printf("folding IC:\n");pric2(stdout,p);}
   if(c==TEST||c==COMPARE){
     union atyps val;int cc; /*  condition codes */
@@ -365,7 +372,10 @@ int fold(IC *p)
       else
 	cc=1;
     }else{
-      cc=compare_const(&p->q1.val,&p->q2.val,p->typf);
+      if(p->q1.flags&VARADR)
+	cc=compare_const(&p->q1.val,&p->q2.val,UNSIGNED|MAXINT);
+      else
+	cc=compare_const(&p->q1.val,&p->q2.val,p->typf);
     }
     bp=p->next;
     if(bp->code>=BEQ&&bp->code<=BGT&&(!p->z.flags||p->z.v==bp->q1.v)){
@@ -401,6 +411,8 @@ int fold(IC *p)
   }else
     calc(c,p->typf,&p->q1.val,&p->q2.val,&p->q1.val,p);
   p->q2.flags=0;
+  if(p->code==ADDI2P||p->code==SUBIFP)
+    p->typf=p->typf2;
   p->q2.val.vmax=sizetab[p->typf&NQ];
   p->code=ASSIGN;
   if(DEBUG&1024){printf("becomes\n");pric2(stdout,p);}
@@ -417,7 +429,13 @@ int propagate(IC *sic,obj *o,int cponly,int global)
   Var *v,*vaddr=0;IC *p;
   zmax voff;
   if(!o||!o->v) ierror(0);
-  if(is_volatile_obj(o)) return 0;
+  if(cponly){
+    if(is_volatile_obj(o))
+      return 0;
+  }else{
+    if((o->flags&VAR)&&(o->v->vtyp->flags&VOLATILE))
+      return 0;
+  }
   if(disable&8) return 0;
   v=o->v;
   i=v->index;
@@ -436,14 +454,33 @@ int propagate(IC *sic,obj *o,int cponly,int global)
   if(v->nesting==0||v->storage_class==STATIC||v->storage_class==EXTERN){
     /*  Wenn moeglich bei statischen Variablen den Wert bei der         */
     /*  Initialisierung ermitteln.                                      */
-    if(cponly&&ISARITH(v->vtyp->flags)&&((v->vtyp->flags&CONST)||(v->nesting>0&&!(v->flags&(USEDASADR|USEDASDEST))))){
+    /*if(cponly&&ISARITH(v->vtyp->flags)&&((v->vtyp->flags&CONST)||(v->nesting>0&&!(v->flags&(USEDASADR|USEDASDEST))))){*/
+    if(cponly&&is_const(v->vtyp)){
       /*  Variable hat noch den Wert der Initialisierung.         */
       if(v->clist){
-	/*  Der Wert der Initialisierung ist noch gespeichert.  */
-	if(DEBUG&1024) printf("using static initializer\n");
-	o->val=v->clist->val;
-	o->flags=KONST;
-	return 1;
+	int t;
+	if(o==&sic->q1) t=q1typ(sic);
+	else if(o==&sic->q2) t=q2typ(sic);
+	else if(o==&sic->z) t=ztyp(sic);
+	else ierror(0);
+	if(ISARITH(v->vtyp->flags)){
+	  /*  Der Wert der Initialisierung ist noch gespeichert.  */
+	  if(DEBUG&1024) printf("using static initializer\n");
+	  o->val=v->clist->val;
+	  o->flags=KONST;
+	  return 1;
+	}else if(ISINT(t&NQ)){
+	  int state;
+	  if(DEBUG&1024) printf("using static initializer (new version)\n");
+	  gval.vumax=get_clist_int(v->vtyp,v->clist,o->val.vmax,sizetab[t&NQ],&state);
+	  if(state){
+	    if(DEBUG&1024) printf("using static initializer (new version)\n");
+	    eval_const(&gval,UNSIGNED|MAXINT);
+	    insert_const(&o->val,t);
+	    o->flags=KONST;
+	    return 1;
+	  }
+	}
       }else{
 	/*  Hier evtl. eine implizite 0 erkennen.               */
       }
@@ -464,14 +501,17 @@ int propagate(IC *sic,obj *o,int cponly,int global)
       if(p->z.flags!=o->flags) continue;
     }else{
       if((p->z.flags|DREFOBJ)!=o->flags) continue;
+      if(p->z.flags&DREFOBJ) continue;
     }
     if(BTST(rd_defs,UNDEF(j))&&BTST(var_defs[i],UNDEF(j))) return 0;
+    if(BTST(rd_defs,UNDEF(j))&&BTST(var_defs[i],j)) return 0;
+
     if((p->code!=ASSIGN||((p->q1.flags&(KONST|DREFOBJ))!=KONST&&(p->q1.flags&(VARADR|DREFOBJ))!=VARADR))
        &&(p->code!=ADDRESS||!(o->flags&DREFOBJ))) return 0;
     if(p->q1.flags&KONST){
       if(vaddr) return 0;
       if(val){
-	if((p->typf&NU)!=t) return 0;
+	if((p->typf&NQ)!=(t&NQ)) return 0;
 	if(compare_const(&p->q1.val,val,t)) return 0;
       }else{
 	val=&p->q1.val;t=p->typf&NU;
@@ -489,14 +529,22 @@ int propagate(IC *sic,obj *o,int cponly,int global)
 
   /* found constant */
   if(val){
-    if(!cponly) return 0;
-    if(o==&sic->q1&&(q1typ(sic)&NU)!=t) return 0;
-    if(o==&sic->q2&&(q2typ(sic)&NU)!=t) return 0;
-    if(o==&sic->z&&(ztyp(sic)&NU)!=t) return 0;
-
-    if(DEBUG&1024) printf("can replace <%s> by constant\n",o->v->identifier);
-    o->val=*val;
-    o->flags=KONST;
+    if(cponly){
+      if(o==&sic->q1&&(q1typ(sic)&NQ)!=(t&NQ)) return 0;
+      if(o==&sic->q2&&(q2typ(sic)&NQ)!=(t&NQ)) return 0;
+      if(o==&sic->z&&(ztyp(sic)&NQ)!=(t&NQ)) return 0;
+      
+      if(DEBUG&1024) printf("can replace %ld+<%s>(%p) by constant\n",zm2l(o->val.vmax),o->v->identifier,o->v);
+      /* TODO: do we need eval_const/insert_const (if representation of unsigned is different? */
+      o->val=*val;
+      o->flags=KONST;
+    }else{
+      if(DEBUG&1024) printf("can replace <%s> by constant address\n",o->v->identifier);
+      o->val=*val;
+      o->flags|=KONST;
+      o->flags&=~VAR;
+      o->v=0;
+    }
     return 1;
   }
   if(vaddr&&(vaddr->storage_class==EXTERN||vaddr->storage_class==STATIC)){
@@ -510,9 +558,10 @@ int propagate(IC *sic,obj *o,int cponly,int global)
     return 2;
   }
   if(vaddr&&(o->flags&DREFOBJ)){
-    /*//*/    if(o==&sic->q1&&(q1typ(sic)&NU)!=(t&NU)) return 0;
-      /*//*/if(o==&sic->q2&&(q2typ(sic)&NU)!=(t&NU)) return 0;
-      /*//*/if(o==&sic->z&&(ztyp(sic)&NU)!=(t&NU)) return 0;
+    t=vaddr->vtyp->flags&NU;
+    if(o==&sic->q1&&(q1typ(sic)&NU)!=t) return 0;
+    if(o==&sic->q2&&(q2typ(sic)&NU)!=t) return 0;
+    if(o==&sic->z&&(ztyp(sic)&NU)!=t) return 0;
     if(DEBUG&1024) printf("can replace *<%s> by address\n",o->v->identifier);
     o->v=vaddr;
     o->val.vmax=voff;
@@ -523,7 +572,7 @@ int propagate(IC *sic,obj *o,int cponly,int global)
   if(!found&&global&&v->storage_class!=EXTERN&&v->storage_class!=STATIC&&!(v->flags&USEDBEFORE)&&v->reg==0&&zmleq(l2zm(0L),v->offset)){
     if(*v->identifier||!(optflags&4096)){
 #ifdef HAVE_MISRA
-      misra_neu(30,9,1,0,v->identifier);
+/* removed */
 #endif
       error(171,v->identifier);v->flags|=USEDBEFORE;
       if(!*v->identifier) {printf("<%p>\n",(void *)v);ierror(0);}
@@ -550,18 +599,23 @@ int constant_propagation(flowgraph *fg,int global)
       int c=p->code;
       /* if(DEBUG&1024){print_rd(rd_defs);pric2(stdout,p);}*/
       if(c!=ADDRESS&&c!=NOP&&ISSCALAR(p->typf)&&(c<LABEL||c>BRA)){
-	if((p->q1.flags&(VAR|VARADR))==VAR&&!(q1typ(p)&VOLATILE)&&!is_volatile_obj(&p->q1)){
-	  changed|=propagate(p,&p->q1,1,global);
-	  if(p->q1.flags&DREFOBJ) changed|=propagate(p,&p->q1,0,global);
+	if((p->q1.flags&(VAR|VARADR))==VAR){
+	  if(!(q1typ(p)&VOLATILE)&&!is_volatile_obj(&p->q1))
+	    changed|=propagate(p,&p->q1,1,global);
+	  if((p->q1.flags&DREFOBJ)&&!(p->q1.v->vtyp->flags&VOLATILE))
+	    changed|=propagate(p,&p->q1,0,global);
 	}
-	if((p->q2.flags&(VAR|VARADR))==VAR&&!(q2typ(p)&VOLATILE)&&!is_volatile_obj(&p->q2)){
-	  changed|=propagate(p,&p->q2,1,global);
-	  if(p->q2.flags&DREFOBJ) changed|=propagate(p,&p->q2,0,global);
+	if((p->q2.flags&(VAR|VARADR))==VAR){
+	  if(!(q2typ(p)&VOLATILE)&&!is_volatile_obj(&p->q2))
+	    changed|=propagate(p,&p->q2,1,global);
+	  if((p->q2.flags&DREFOBJ)&&!(p->q2.v->vtyp->flags&VOLATILE))
+	    changed|=propagate(p,&p->q2,0,global);
 	}
       }
       /* only there to detect uninitialized variables */
-      if(((p->z.flags&(VAR|DREFOBJ))==(VAR|DREFOBJ))&&!(ztyp(p)&VOLATILE)&&!is_volatile_obj(&p->z)){
-	changed|=propagate(p,&p->z,0,global);
+      if(((p->z.flags&(VAR|DREFOBJ))==(VAR|DREFOBJ))){
+	if(!(p->z.v->vtyp->flags&VOLATILE))
+	  changed|=propagate(p,&p->z,0,global);
       }
       rd_change(p);
       

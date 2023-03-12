@@ -1,6 +1,7 @@
-/*  $VER: vbcc (declaration.c) $Revision: 1.67 $    */
+/*  $VER: vbcc (declaration.c) $Revision: 1.85 $    */
 
 #include <string.h>
+#include <stdio.h>
 
 #include "vbcc_cpp.h"
 #include "vbc.h"
@@ -19,43 +20,44 @@ static int did_return_label;
 #ifdef HAVE_TARGET_ATTRIBUTES
 unsigned long return_tattr;
 #endif
+zumax return_mask;
 zmax init_dyn_sz,init_const_sz;
 int init_dyn_cnt,init_const_cnt;
 
 void init_sl(struct_list *sl);
 
 #ifdef HAVE_ECPP
-#define ECPP_CPP_LINKAGE 1
-#define ECPP_C_LINKAGE 2
-static int ecpp_ret_flags;
-static int ecpp_linkage=ECPP_CPP_LINKAGE;
-static int ecpp_access;
-char* ecpp_mangle_name(type *t,char *identifier,struct_declaration *higher_nesting);
-char* ecpp_mangle_arg(char *pos,type *t);
-char* ecpp_mangle_nested_identifier(char *pos,struct_declaration *sd);
-Var *ecpp_find_ext_var(char *identifier);
-Var *ecpp_find_var(char *identifier);
-int ecpp_is_member_struct(struct_list *sl,struct_declaration *sd);
-struct_declaration *ecpp_find_struct(char* identifier,struct_declaration *scope,int search_flag);
-struct_declaration *ecpp_find_scope(char* nested_name,char** identifier);
-struct_list *ecpp_find_member(char* identifier,struct_declaration *scope,struct_declaration** ret_scope,int search_flag);
-void ecpp_add_this_pointer(struct_declaration *decl);
-type *ecpp_declarator(type *t);
-int ecpp_linkage_specification();
-void ecpp_call_ctor(struct_declaration *sd,np this,argument_list *al);
-void ecpp_auto_dtor(Var *v);
-void ecpp_call_dtor(struct_declaration *sd,np this);
-void ecpp_auto_call_dtors();
-void ecpp_free_init_list(np *initlist,struct_declaration *sd);
-void ecpp_gen_set_vtable(struct_declaration *class);
-np* ecpp_ctor_init_list(struct_declaration *ctor_func,int definit);
-void ecpp_dtor_prolog();
-void ecpp_dtor_epilog();
-void ecpp_gen_default_ctor(struct_declaration *class);
-void ecpp_gen_default_dtor(struct_declaration *class);
-void ecpp_access_specifier();
-void ecpp_add_friend(struct_declaration *class,struct_declaration *friend);
-int ecpp_is_friend(struct_declaration *class);
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
 extern np gen_libcall(char *,np,type *,np,type *);
@@ -100,7 +102,7 @@ static char *get_string(void)
   p=mymalloc(l);
   cl=tree->cl;l=0;
   while(cl){
-    p[l]=zm2l(zc2zm(cl->other->val.vchar));
+    p[l]=CHARBACK(zm2l(zc2zm(cl->other->val.vchar)));
     l++;
     cl=cl->next;
   }
@@ -134,6 +136,7 @@ int settyp(int typnew, int typold)
   if(typold==LONG&&typnew==FLOAT){ error(203); return DOUBLE;}
   if(typold==LONG&&typnew==DOUBLE) return LDOUBLE;
   if(c99&&typold==LONG&&typnew==LONG) return LLONG;
+  if(typold==INT&&(typnew==SHORT||typnew==LONG)) return typnew;
   if(typold!=0&&typnew!=INT){error(47);return(typnew);}
   if(typold==0&&typnew==INT) return(INT);
   if(typold==0) return(typnew);
@@ -146,7 +149,7 @@ int settyp(int typnew, int typold)
 #define XSIGNED 16384
 
 #ifdef HAVE_MISRA
-int misra_return_type_unspec= 0;
+/* removed */
 #endif
 
 type *declaration_specifiers(void)
@@ -155,11 +158,12 @@ type *declaration_specifiers(void)
 {
   int typ=0,type_qualifiers=0,notdone,storage_class,hard_reg,have_inline;
 #ifdef HAVE_ECPP
-	int ecpp_flags=0;
-  struct_declaration* merk_class=0;
-  int merk_access;
+/* removed */
+/* removed */
+/* removed */
 #endif
   char *imerk,sident[MAXI],sbuff[MAXI],*attr=0,*vattr=0;
+  zumax mask=ul2zum(0UL);
   type *new=new_typ(),*t,*ts;
   struct_declaration *ssd;
   struct_list (*sl)[];
@@ -178,15 +182,15 @@ type *declaration_specifiers(void)
         if(!strcmp("union",ctok->name)) {
           notdone=UNION;
 #ifdef HAVE_MISRA
-          misra_neu(110,18,4,0);
+/* removed */
 #endif
         }
 #ifdef HAVE_ECPP
-        if(ecpp){
-          merk_access=ecpp_access;
-          if(!strcmp("class",ctok->name)) {ecpp_access=ECPP_PRIVATE;notdone=STRUCT;}
-          if(!strcmp("struct",ctok->name)) {ecpp_access=ECPP_PUBLIC;notdone=STRUCT;}
-        }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
         next_token();
         killsp();
@@ -196,7 +200,7 @@ type *declaration_specifiers(void)
           killsp();
           ssd=find_struct(sident,0);
 #ifdef HAVE_MISRA
-          if (misra_is_reserved(sident)) misra_neu(115,20,2,0);
+/* removed */
 #endif
           if(ssd&&ctok->type==LBRA&&find_struct(sident,nesting)&&ssd->count>0) error(13,sident);
           if(!ssd||((ctok->type==LBRA||ctok->type==SEMIC)&&!find_struct(sident,nesting))){
@@ -206,10 +210,10 @@ type *declaration_specifiers(void)
             new->exact=ssd=add_sd(ssd,notdone);
             if(!ecpp)add_struct_identifier(sident,ssd);
 #ifdef HAVE_ECPP
-            if (ecpp){
-              if(!current_class)add_struct_identifier(sident,ssd);
-              else ssd->identifier=add_identifier(sident,strlen(sident));
-            }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
           }else{
             new->exact=ssd;
@@ -224,30 +228,30 @@ type *declaration_specifiers(void)
         }
         if(ssd->typ!=notdone) error(230,sident);
 #ifdef HAVE_ECPP
-        if(ecpp&&ctok->type==T_COLON){
-          /* derived class */
-          int access=ecpp_access;
-          struct_declaration* base_sd;
-          char *id=0;
-          next_token();
-          killsp();
-          if(ctok->type!=NAME){
-            error(76);
-          }
-          if(!strcmp("private",ctok->name)){access=ECPP_PRIVATE;next_token();killsp();}
-          else if(!strcmp("protected",ctok->name)){access=ECPP_PROTECTED;next_token();killsp();}
-          else if(!strcmp("public",ctok->name)){access=ECPP_PUBLIC;next_token();killsp();}
-          base_sd=ecpp_find_scope(ctok->name,&id);
-          if(!base_sd||id)error(337,ctok->name);
-          if(base_sd->count<=0)error(336,ctok->name);
-          ssd->base_class=base_sd;
-          ssd->base_access=access;
-          next_token();
-          killsp();
-          if(ctok->type!=LBRA){
-            error(335);
-          }
-        }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif        
         if(ctok->type==LBRA){
           int bfoffset,bfsize,flex_array=0,cbfo=0;
@@ -260,17 +264,17 @@ type *declaration_specifiers(void)
             sl=mymalloc(slsz*sizeof(struct_list));
             ssd->count=0;
 #ifdef HAVE_ECPP
-          if(ecpp){
-            merk_class=current_class;
-            current_class=new->exact;
-            current_class->higher_nesting=merk_class;
-          }
-          if(ecpp){
-						sl=mymalloc(slsz*sizeof(struct_list));
-						ssd->count=0;
-            ssd->sl=sl;
-          }
-          if(ecpp) ecpp_access_specifier();
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 	  scount=ssd->count;
           ts=declaration_specifiers();
@@ -285,7 +289,7 @@ type *declaration_specifiers(void)
               if((ts->flags&NQ)!=INT) {
                 error(51);
 #ifdef HAVE_MISRA
-                misra_neu(112,6,4,0);
+/* removed */
 #endif
               }
               next_token();killsp();tree=assignment_expression();
@@ -311,9 +315,9 @@ type *declaration_specifiers(void)
                   cbfo=0;
               }
 #ifdef HAVE_MISRA
-              if (ts->flags&XSIGNED) {
-                if (bfsize < 2) misra_neu(112,6,5,0);
-              }
+/* removed */
+/* removed */
+/* removed */
 #endif
               if(tree) free_expression(tree);
             }else{
@@ -321,22 +325,22 @@ type *declaration_specifiers(void)
               cbfo=0;
             }
 #ifdef HAVE_ECPP
-            if(ecpp){
-              if(t->ecpp_flags&ECPP_FRIEND){
-                if(!t->exact)ierror(0);
-                ecpp_add_friend(ssd,t->exact);
-                killsp();
-                if(ctok->type==COMMA) {next_token();killsp();continue;}
-                if(ctok->type!=SEMIC) error(54); else next_token();
-                killsp();
-                ecpp_access_specifier();
-                if(ctok->type!=RBRA){
-                  if(ts) freetyp(ts);
-                  ts=declaration_specifiers();killsp();
-                }
-                continue;
-              }
-            }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
             if(type_uncomplete(t)){
               if(!c99||notdone!=STRUCT||flex_array||(t->flags&NQ)!=ARRAY||type_uncomplete(t->next)){
@@ -362,59 +366,60 @@ type *declaration_specifiers(void)
                   error(16,ident);
             }
 #ifdef HAVE_MISRA
-            if (misra_is_reserved(ident)) misra_neu(115,20,2,0);
+/* removed */
 #endif
 #ifdef HAVE_ECPP
-            if(ecpp){
-              (*sl)[scount].mangled_identifier=0;
-              if(!*ident&&ISSTRUCT(t->flags))t->ecpp_flags|=ECPP_NESTED_CLASS;
-              if(ISFUNC(t->flags)){
-                struct_declaration *decl=t->exact;
-                int add_void_arg=0;
-                if(t->ecpp_flags&ECPP_STATIC){
-                  if(add_void_arg) decl->sl=myrealloc(decl->sl,(decl->count+1)*sizeof(struct_list));
-                }else{
-                  /* the first argument of a class-method is the this pointer */
-                  if(add_void_arg) decl->sl=myrealloc(decl->sl,(decl->count+2)*sizeof(struct_list));
-                  else decl->sl=myrealloc(decl->sl,(decl->count+1)*sizeof(struct_list));
-                }
-                if(add_void_arg){
-                  /* add the trailing void FIXME: should be obsolete! */
-                  init_sl(&(*decl->sl)[decl->count]);
-                  (*decl->sl)[decl->count].styp=new_typ();
-                  (*decl->sl)[decl->count].styp->flags=VOID;
-                  (*decl->sl)[decl->count].styp->next=0;
-                  decl->count++;
-                }
-                if(*ident==0&&ISSTRUCT(t->next->flags)&&current_class&&!strcmp(t->next->exact->identifier,current_class->identifier)){
-                  /* FIXME: obsolete? done in ecpp_declarator */
-                  strcpy(ident,current_class->identifier);
-                }
-                (*sl)[scount].identifier=add_identifier(decl->identifier,strlen(decl->identifier));;
-                (*sl)[scount].mangled_identifier=add_identifier(decl->mangled_identifier,strlen(decl->mangled_identifier));;
-                if(!(t->ecpp_flags&ECPP_STATIC)){
-                  add_var(decl->mangled_identifier,clone_typ(t),EXTERN,0);
-                }
-              } else if(!ISFUNC(t->flags)&&t->ecpp_flags&ECPP_STATIC){
-                  char *mangled_name; 
-                (*sl)[scount].identifier=add_identifier(ident,strlen(ident));
-                mangled_name=ecpp_mangle_name(t,ident,ssd);
-                  (*sl)[scount].mangled_identifier=add_identifier(mangled_name,strlen(mangled_name));
-                  (*sl)[scount].align=l2zm(0L);
-                strncpy(ident,mangled_name,MAXI);
-              } else {
-                (*sl)[scount].identifier=add_identifier(ident,strlen(ident));
-              }
-            }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 	    (*sl)[scount].bfoffset=bfoffset;
             (*sl)[scount].bfsize=bfsize;
             (*sl)[scount].styp=t;
             if(!ecpp) (*sl)[scount].identifier=add_identifier(ident,strlen(ident));
 #ifdef HAVE_ECPP
-            if(ecpp&&t->ecpp_flags&ECPP_NESTED_CLASS){
-              (*sl)[scount].align=l2zm(0L);
-            }else
+/* removed */
+/* removed */
+/* removed */
 #endif
             if(pack_align>0&&pack_align<falign(t))
               (*sl)[scount].align=pack_align;
@@ -448,7 +453,7 @@ type *declaration_specifiers(void)
             if(ctok->type!=SEMIC) error(54); else next_token();
             killsp();
 #ifdef HAVE_ECPP
-            if(ecpp)ecpp_access_specifier();
+/* removed */
 #endif
             if(ctok->type!=RBRA){
               if(ts) freetyp(ts);
@@ -459,154 +464,154 @@ type *declaration_specifiers(void)
 	  ssd->count=scount;
           if(ssd->count==0) error(55);
 #ifdef HAVE_ECPP
-          if(ecpp){
-            /* FIXME: overriding virtual methods does not require methods being declared virtual */
-            struct_list (*ssl)[]=sl;
-            int i; int vfcount=0;
-            current_class=merk_class;
-            for(i=0;i<ssd->count;++i){
-              if(ISFUNC((*ssl)[i].styp->flags)&&(*ssl)[i].styp->exact->ecpp_flags&ECPP_VIRTUAL)
-                vfcount++;
-            }
-            if(vfcount>0||ssd->base_class&&ssd->base_class->ecpp_flags&ECPP_VIRTUAL){
-              type *vttyp=new_typ();
-              struct_declaration *vtsd, *base_vtsd=0;
-              const_list *vtclist=0;
-              const_list *vtclist_last=0;
-							char *vtname; int base_vfcount=0;
-							if(ssd->base_class&&ssd->base_class->ecpp_flags&ECPP_VIRTUAL){
-								base_vtsd=(*ssd->base_class->sl)[0].styp->next->exact;
-							}
-							ssd->ecpp_flags|=ECPP_VIRTUAL;
-              vtsd=mymalloc(sizeof(*vtsd));
-              vtsd=add_sd(vtsd,STRUCT);
-              vtsd->ecpp_flags=ECPP_TV;
-							if(base_vtsd){
-								base_vfcount=base_vtsd->count;
-								vtsd->sl=mymalloc((vfcount+base_vtsd->count)*sizeof(struct_list));
-							}else{
-								vtsd->sl=mymalloc(vfcount*sizeof(struct_list));
-							}
-							vtsd->count=0;
-              vttyp->flags=STRUCT;
-              vttyp->exact=vtsd;
-              for(i=0;i<ssd->count+base_vfcount;++i){
-								type *t=0;Var *v;
-								if(i>=base_vfcount&&(!ISFUNC((*ssl)[i-base_vfcount].styp->flags)||
-									!((*ssl)[i-base_vfcount].styp->exact->ecpp_flags&ECPP_VIRTUAL))){
-									continue;
-								}
-								if(i<base_vfcount){
-								  /* append base vf to vtable */
-									t=clone_typ((*base_vtsd->sl)[i].styp);
-									(*vtsd->sl)[vtsd->count].identifier=
-                    add_identifier((*base_vtsd->sl)[i].identifier,strlen((*base_vtsd->sl)[i].identifier));
-								}else{
-									int j; int override=-1;
-									for(j=0;j<base_vfcount;++j){
-										if(!strcmp((*base_vtsd->sl)[j].identifier,(*ssl)[i-base_vfcount].identifier)){
-											override=j;
-											break;
-										}
-									}
-									if(override>=0){
-										/* override vf */
-										t=new_typ();
-										t->flags=POINTER_TYPE((*ssl)[i-base_vfcount].styp->flags);
-										t->next=clone_typ((*ssl)[i-base_vfcount].styp);
-										freetyp((*vtsd->sl)[override].styp);
-										(*vtsd->sl)[override].styp=t;
-										continue;
-									}else{
-										/* append new vf to vtable */
-										t=new_typ();
-										t->flags=POINTER_TYPE((*ssl)[i-base_vfcount].styp->flags);
-										t->next=clone_typ((*ssl)[i-base_vfcount].styp);
-										(*vtsd->sl)[vtsd->count].identifier=
-                      add_identifier((*ssl)[i-base_vfcount].identifier,strlen((*ssl)[i-base_vfcount].identifier));
-									}
-								}
-								(*vtsd->sl)[vtsd->count].styp=t;
-								(*vtsd->sl)[vtsd->count].bfsize=-1;
-								(*vtsd->sl)[vtsd->count].bfoffset=-1;
-								(*vtsd->sl)[vtsd->count].mangled_identifier=0;
-								vtsd->count++;
-							}
-							for(i=0;i<vtsd->count;++i){
-								const_list *cl;
-								np n; int ret;
-								int oldconst;
-								(*vtsd->sl)[i].align=falign((*vtsd->sl)[i].styp);
-								n=new_node();
-								n->flags=ADDRESS;
-								n->right=0;
-								n->left=new_node();
-								n->left->flags=IDENTIFIER;
-								n->left->left=n->left->right=0;
-								n->left->identifier=(*vtsd->sl)[i].styp->next->exact->mangled_identifier;
-								n->left->o.v=ecpp_find_ext_var((*vtsd->sl)[i].styp->next->exact->mangled_identifier);
-								ret=type_expression(n,0);
-								if(ret==0)ierror(0);
-								cl=mymalloc(sizeof(const_list));
-								if(!vtclist){vtclist=vtclist_last=cl;}
-								else{vtclist_last->next=cl;vtclist_last=cl;}
-								cl->other=mymalloc(sizeof(const_list));
-								cl->other->tree=n;
-								oldconst=const_expr;
-								const_expr=1;
-								gen_IC(n,0,0);
-								const_expr=oldconst;
-								n->o.v->flags|=USEDASADR;
-              }
-							vtname=ecpp_mangle_name(new,"_ZTV",0);
-							vtname=add_identifier(vtname,strlen(vtname));
-              v=add_var(vtname,vttyp,EXTERN,vtclist);
-              v->flags|=DEFINED;
-              v->dfilename=filename;
-              v->dline=line;
-              if(slsz<=ssd->count+1)ierror(0);
-              memmove(&(*sl)[1],&(*sl)[0],ssd->count*sizeof(struct_list));
-              init_sl(&(*sl)[0]);
-							(*sl)[0].identifier=add_identifier("_ZTV",4);
-              (*sl)[0].styp=new_typ();
-              (*sl)[0].styp->flags=POINTER_TYPE(vttyp->flags);
-              (*sl)[0].styp->next=clone_typ(vttyp);
-							(*sl)[0].align=falign(vttyp);
-              vtsd->mangled_identifier=add_identifier(vtname,strlen(vtname));
-              ssd->count++;
-            }
-          }
-          if(ecpp){
-            int i;
-            int ispod=1;
-            int genctor=0; int gendtor=0;
-            if(ssd->base_class)ispod=0;
-            else for(i=0;i<ssd->count;++i){
-              if(ISFUNC((*sl)[i].styp->flags)&&(*sl)[i].styp->exact->ecpp_flags&ECPP_VIRTUAL){
-                ispod=0;break;
-              }
-              if(ecpp_is_member_struct(&(*sl)[i],ssd)&&!((*sl)[i].styp->exact->ecpp_flags&ECPP_POD)){
-                ispod=0;break;
-              }
-            }
-            if(ispod&&ecpp_find_member("__ctor",ssd,0,0))ispod=0;
-            if(ispod&&ecpp_find_member("__dtor",ssd,0,0))ispod=0;
-            if(ispod)ssd->ecpp_flags|=ECPP_POD;
-
-            if(!(ssd->ecpp_flags&ECPP_POD)&&!ecpp_find_member("__ctor",ssd,0,0)){
-              genctor=1;
-            }
-            if(!(ssd->ecpp_flags&ECPP_POD)&&!ecpp_find_member("__dtor",ssd,0,0)){
-              gendtor=1;
-            }
-            if(ssd->count>=slsz-genctor-gendtor){
-              slsz+=genctor+gendtor;
-              sl=myrealloc(sl,slsz*sizeof(struct_list));
-            }
-            if(genctor)
-              ecpp_gen_default_ctor(ssd);
-            if(gendtor)ecpp_gen_default_dtor(ssd);
-          }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
           ident=imerk;
 					add_sl(ssd,sl);
@@ -615,7 +620,7 @@ type *declaration_specifiers(void)
           new->flags=notdone|type_qualifiers;
         }
 #ifdef HAVE_ECPP
-        if(ecpp&&notdone==STRUCT)ecpp_access=merk_access;
+/* removed */
 #endif
         notdone=1;
       }else if(!strcmp("enum",ctok->name)){
@@ -638,7 +643,7 @@ type *declaration_specifiers(void)
               if(mode==2) mode=3;
               if(mode==0) mode=2;
 #ifdef HAVE_MISRA                                /* MISRA Rule 9.3 checking */
-              if(mode==1) misra_neu(32,9,3,0);
+/* removed */
 #endif
               next_token();killsp();
               v->clist=initialization(v->vtyp,0,0,0,0,0);
@@ -646,7 +651,7 @@ type *declaration_specifiers(void)
             }else{
               if(mode==0) mode=1;
 #ifdef HAVE_MISRA                                /* MISRA Rule 9.3 checking */
-              if(mode==3) misra_neu(32,9,3,0);
+/* removed */
 #endif
               v->clist=mymalloc(CLS);
               v->clist->val.vint=zm2zi(val);
@@ -695,8 +700,8 @@ type *declaration_specifiers(void)
         typ=settyp(VOID,typ);notdone=1;
       }else if(!strcmp("char",ctok->name)){
 #ifdef HAVE_MISRA
-        if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
-        if(!(type_qualifiers&(XSIGNED|UNSIGNED))) misra_neu(14,0,0,0);
+/* removed */
+/* removed */
 #endif
         next_token();
         typ=settyp(CHAR,typ);
@@ -705,31 +710,31 @@ type *declaration_specifiers(void)
 	  type_qualifiers|=UNSIGNED;
       }else if(!strcmp("short",ctok->name)){
 #ifdef HAVE_MISRA
-        if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
+/* removed */
 #endif
         next_token();
         typ=settyp(SHORT,typ);notdone=1;
       }else if(!strcmp("int",ctok->name)){
 #ifdef HAVE_MISRA
-        if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
+/* removed */
 #endif
         next_token();
         typ=settyp(INT,typ);notdone=1;
       }else if(!strcmp("long",ctok->name)){
 #ifdef HAVE_MISRA
-        if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
+/* removed */
 #endif
         next_token();
         typ=settyp(LONG,typ);notdone=1;
       }else if(!strcmp("float",ctok->name)){
 #ifdef HAVE_MISRA
-                  if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
+/* removed */
 #endif
         next_token();
         typ=settyp(FLOAT,typ);notdone=1;
       }else if(!strcmp("double",ctok->name)){
 #ifdef HAVE_MISRA
-        if(storage_class!=TYPEDEF) misra_neu(13,6,3,0);
+/* removed */
 #endif
         next_token();
         typ=settyp(DOUBLE,typ);notdone=1;
@@ -800,7 +805,7 @@ type *declaration_specifiers(void)
         dsc;storage_class=AUTO;notdone=1;
       }else if(!strcmp("register",ctok->name)){
 #ifdef HAVE_MISRA
-        misra_neu(28,0,0,0);
+/* removed */
 #endif
         next_token();
         dsc;storage_class=REGISTER;notdone=1;
@@ -808,7 +813,7 @@ type *declaration_specifiers(void)
         next_token();
         dsc;storage_class=STATIC;notdone=1;
 #ifdef HAVE_ECPP
-        if(ecpp)ecpp_flags|=ECPP_STATIC;
+/* removed */
 #endif
       }else if(!strcmp("extern",ctok->name)){
         next_token();
@@ -820,13 +825,13 @@ type *declaration_specifiers(void)
         next_token();
         have_inline=1;notdone=1;
 #ifdef HAVE_ECPP
-      }else if(ecpp&&!strcmp("virtual",ctok->name)){
-        next_token();
-        if(ecpp_flags&ECPP_VIRTUAL)error(58);
-				ecpp_flags|=ECPP_VIRTUAL;notdone=1;
-      }else if(ecpp&&!strcmp("friend",ctok->name)){
-        next_token();
-				ecpp_flags|=ECPP_FRIEND;notdone=1;
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 			}else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__reg",ctok->name)){
         char *d;
@@ -841,6 +846,23 @@ type *declaration_specifiers(void)
           notdone=1;
           free(d);
         }
+        killsp();
+        if(ctok->type==RPAR) next_token(); else error(59);
+        killsp();
+      }else if(!strcmp("__mask",ctok->name)){
+	np tree;
+	next_token();killsp();
+        if(ctok->type==LPAR) next_token(); else error(151);
+	tree=expression();
+	if(tree&&type_expression(tree,0)){
+	  if(tree->flags==CEXPR&&ISINT(tree->ntyp->flags)){
+	    eval_const(&tree->val,tree->ntyp->flags);
+	    mask=vumax;
+	  }else
+	    error(18);
+	  free_expression(tree);
+	}else
+	  error(18);
         killsp();
         if(ctok->type==RPAR) next_token(); else error(59);
         killsp();
@@ -904,68 +926,68 @@ type *declaration_specifiers(void)
             next_token();
           }
 #ifdef HAVE_ECPP
-          else if(ecpp){
-            struct_declaration *scope;
-            char* id=0;
-            int done=0;
-            int isctor=0;
-            scope=ecpp_find_scope(ctok->name,&id);
-            if(scope&&!id){
-              if(scope==current_class)isctor=1;
-              else{
-                int clen=strlen(scope->identifier);
-                int idlen=strlen(ctok->name);
-                if(idlen>clen+1&&ctok->name[idlen-clen-1]==':'){
-                  char t[MAXI];
-                  strncpy(t,ctok->name,idlen-clen-1);
-                  t[idlen-clen-1]=0;
-                  if(scope==ecpp_find_scope(t,0))isctor=1;
-        }
-      }
-              if(isctor){
-                token mtok;
-                copy_token(&mtok,ctok);
-                next_token();
-                if(ctok->type==LPAR){
-                  /* found a ctor declaration */
-                  /* FIXME: this could also be a pointer to function returning the class-type */
-                  free(new);
-                  new=new_typ();
-                  new->flags=VOID;
-                  ecpp_flags|=ECPP_CTOR;
-                  typ=settyp(new->flags,typ);
-                  done=1;
-                }
-                push_token(&mtok);
-                free(mtok.name);
-              }
-    }
-            if(!done&&scope&&!id){
-              /* found a type */
-              free(new);
-              new=new_typ();
-              new->flags=STRUCT;
-              new->exact=scope;
-              typ=settyp(new->flags,typ);
-              next_token();
-            }
-          }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
         }
       }
     }
 #ifdef HAVE_ECPP
-    if(ecpp&&ctok->type==NOT){
-      next_token();killsp();
-      if(ctok->type==NAME){
-        /* found a dtor declaration */
-        free(new);
-        new=new_typ();
-        new->flags=VOID;
-        ecpp_flags|=ECPP_DTOR;
-        typ=settyp(new->flags,0);
-      }
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(DEBUG&2) printf("typ:%d\n",typ);
   }while(notdone);
@@ -973,12 +995,13 @@ type *declaration_specifiers(void)
   return_sc=storage_class;
   return_reg=hard_reg;
   return_vattr=vattr;
+  return_mask=mask;
   return_inline=have_inline;
 #ifdef HAVE_ECPP
-	if(ecpp){
-    if(return_sc&STATIC)ecpp_flags|=ECPP_STATIC;
-    ecpp_ret_flags=ecpp_flags;
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 #ifdef HAVE_TARGET_ATTRIBUTES
   return_tattr=tattr;
@@ -989,7 +1012,7 @@ type *declaration_specifiers(void)
       return 0;
     }
 #ifdef HAVE_MISRA
-        misra_return_type_unspec = 1;
+/* removed */
 #endif
     typ=INT;
   }
@@ -1011,7 +1034,7 @@ type *declarator(type *a)
   if(!a)
     {if(t) freetyp(t);return 0;}
 #ifdef HAVE_ECPP
-  if(ecpp)t=ecpp_declarator(t);
+/* removed */
 #endif
 #ifdef HAVE_EXT_TYPES
   conv_typ(t);
@@ -1089,11 +1112,11 @@ type *direct_declarator(type *a)
     next_token();
     if(!a) return(0);
 #ifdef HAVE_ECPP
-    if(ctok->type==NOT){
-      next_token();
-      if(ctok->type!=NAME)return(0);
-      snprintf(ident,MAXI,"%s~%s",ident,ctok->name);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   }
   else if(ctok->type==LPAR&&a){
@@ -1129,7 +1152,7 @@ type *direct_declarator(type *a)
         }else{
           if(tree->sidefx&&!c99) error(60);
           if(tree->flags!=CEXPR||!ISINT(tree->ntyp->flags)){
-	    if(!c99)
+	    if(!c99||!ALLOCVLA_INLINEASM)
 	      error(19);
 	    else{
 	      type *st;IC *new;
@@ -1165,10 +1188,10 @@ type *direct_declarator(type *a)
       }
     }
 #ifdef HAVE_ECPP
-    if(ecpp&&current_func&&ctok->type==LPAR&&ISSTRUCT(a->flags)){
-      /* don't parse this as function decl, but as ctor call - in var_declaration() */
-      return a;
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(ctok->type==LPAR){
       int komma,firstparm,oldstyle=0;
@@ -1182,13 +1205,13 @@ type *direct_declarator(type *a)
       }
 #endif
 #ifdef HAVE_MISRA
-	  if (misra_return_type_unspec) misra_neu(75,8,2,0);
-	  misra_return_type_unspec = 0;
+/* removed */
+/* removed */
 #endif
       next_token();
       killsp();
 #ifdef HAVE_MISRA
-      if(ctok->type==RPAR) misra_neu(76,16,5,0);
+/* removed */
 #endif
       fsd=mymalloc(sizeof(*fsd));
       slsz=SLSIZE;
@@ -1200,7 +1223,7 @@ type *direct_declarator(type *a)
       while(ctok->type!=RPAR&&ctok->type!=MDOTS){
         int hard_reg;
 #ifdef HAVE_ECPP
-				int ecpp_merk_flags=ecpp_ret_flags;
+/* removed */
 #endif
 	if(!firstparm&&!komma) error(57);
 	komma=firstparm=0;
@@ -1218,14 +1241,14 @@ type *direct_declarator(type *a)
             error(63);
         }
 #ifdef HAVE_ECPP
-        if(ecpp){
-					if(ecpp_ret_flags&ECPP_VIRTUAL)error(339);
-					ecpp_ret_flags=ecpp_merk_flags;
-				}
-        /*if(return_sc&STATIC){
-          (*sl)[fsd->count].styp->ecpp_flags|=ECPP_STATIC;
-          return_sc&=~STATIC;
-        }*/
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
         if(!return_sc) return_sc=AUTO;
         if(return_sc!=AUTO&&return_sc!=REGISTER)
@@ -1270,20 +1293,21 @@ type *direct_declarator(type *a)
       }
       ident=imerk;
 #ifdef HAVE_MISRA
-      if(ctok->type==MDOTS) misra_neu(69,16,1,0);
+/* removed */
 #endif
       if(ctok->type!=MDOTS||!komma){
         int ecpp_addvoid=0;
 #ifdef HAVE_ECPP
-        ecpp_addvoid=ecpp&&ctok->type!=MDOTS&&(fsd->count==0||(fsd->count>0&&(!(*sl)[fsd->count-1].styp||((*sl)[fsd->count-1].styp->flags&NQ)!=VOID)));
+/* removed */
 #endif
         if(ecpp_addvoid||(!ecpp&&fsd->count>0&&(!(*sl)[fsd->count-1].styp||((*sl)[fsd->count-1].styp->flags&NQ)!=VOID))){
           (*sl)[fsd->count].styp=new_typ();
           (*sl)[fsd->count].styp->flags=VOID;
           (*sl)[fsd->count].styp->next=0;
+          (*sl)[fsd->count].reg=0;
           (*sl)[fsd->count].identifier=empty;
 #ifdef HAVE_ECPP
-          (*sl)[fsd->count].mangled_identifier=0;
+/* removed */
 #endif
           fsd->count++;
         }
@@ -1389,6 +1413,7 @@ int declaration(int offset)
     else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__reg",ctok->name)) fl=1;
     else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__attr",ctok->name)) fl=1;
     else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__vattr",ctok->name)) fl=1;
+    else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__mask",ctok->name)) fl=1;
     else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__readsmem",ctok->name)) fl=1;
     else if(/*!(c_flags[7]&USEDFLAG)&&*/!strcmp("__writesmem",ctok->name)) fl=1;
     else{
@@ -1397,12 +1422,12 @@ int declaration(int offset)
     }
   }
 #ifdef HAVE_ECPP
-  if(ecpp&&!fl&&ctok->type==NAME){
-    char *id=0;
-    struct_declaration *sd;
-    sd=ecpp_find_scope(ctok->name,&id);
-    if(sd&&!id)  fl=1;
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   if(offset){
     push_token(&mtok);
@@ -1420,7 +1445,7 @@ void init_sl(struct_list *sl){
   sl->reg=0;
   sl->storage_class=0;
 #ifdef HAVE_ECPP
-  sl->mangled_identifier=0;
+/* removed */
 #endif
 }
 void add_sl(struct_declaration *sd,struct_list (*sl)[])
@@ -1440,12 +1465,12 @@ struct_declaration *add_sd(struct_declaration *new,int typ)
   new->identifier=0;
   new->tunit=last_tunit;
 #ifdef HAVE_ECPP
-  new->higher_nesting=0;
-  new->base_class=0;
-	new->ecpp_flags=0;
-  new->mangled_identifier=0;
-  new->num_friends=0;
-  new->friends=0;
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   if(first_sd[nesting]==0){
     first_sd[nesting]=last_sd[nesting]=new;
@@ -1469,9 +1494,9 @@ void free_sd(struct_declaration *p)
       if(p->count>0) free(p->sl);
     }
 #ifdef HAVE_ECPP
-    if(ecpp){
-      if(p->friends)free(p->friends);
-    }
+/* removed */
+/* removed */
+/* removed */
 #endif
     free(p);
     p=merk;
@@ -1533,11 +1558,11 @@ void add_struct_identifier(char *identifier,struct_declaration *sd)
 /*    type *t;*/
   if(DEBUG&1) printf("add_si %s (nesting=%d)->%p\n",identifier,nesting,(void *)sd);
 #ifdef HAVE_MISRA
-  if(misracheck){
-    if(find_var(identifier,0)||find_label(identifier))
-      misra_neu(12,5,6,0,identifier);
-    if(find_struct(identifier,0)) misra_neu(21,5,2,0,identifier);
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   new=mymalloc(sizeof(struct_identifier));
   new->identifier=add_identifier(identifier,strlen(identifier));
@@ -1577,10 +1602,10 @@ struct_declaration *find_struct(char *identifier,int endnesting)
         return(si->sd);
       }
 #ifdef HAVE_MISRA
-      if(misracheck&&l>31){
-		if(!strncmp(si->identifier,identifier,31))
-			misra_neu(11,5,1,0,si->identifier,identifier);
-	  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 	si=si->next;
 	}
@@ -1970,16 +1995,16 @@ Var *add_var(char *identifier, type *t, int storage_class,const_list *clist)
   zmax al;
   /*if(*identifier==0) return;*/ /* sollte woanders bemaekelt werden */
   if(DEBUG&2) printf("add_var(): %s\n",identifier);
-#ifdef HAVE_TARGET_VARHOOK
-  add_var_hook(identifier,t,storage_class,clist);
+#ifdef HAVE_TARGET_VARHOOK_PRE
+  add_var_hook_pre(identifier,t,storage_class,clist);
 #endif
 #ifdef HAVE_MISRA
-  if(misracheck){
-    if(find_struct(identifier,0)||find_label(identifier))
-      misra_neu(12,5,6,0,identifier);
-    if(find_var(identifier,0)) misra_neu(21,5,2,0,identifier);
-		if (misra_is_reserved(identifier)) misra_neu(115,20,2,0);
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   if(ISFUNC(t->flags&NQ)&&(ISARRAY(t->next->flags)||ISFUNC(t->next->flags)))
     error(25);
@@ -2001,6 +2026,8 @@ Var *add_var(char *identifier, type *t, int storage_class,const_list *clist)
   new->dline=0;
   new->description=0;
   new->tunit=last_tunit;
+  new->inline_copy=0;
+  new->index=-1;
 #ifdef HAVE_TARGET_ATTRIBUTES
   new->tattr=0;
 #endif
@@ -2153,6 +2180,9 @@ Var *add_var(char *identifier, type *t, int storage_class,const_list *clist)
   }
   if(is_vlength(new->vtyp))
     create_allocvl(new);
+#ifdef HAVE_TARGET_VARHOOK_POST
+  add_var_hook_post(new);
+#endif
   return(new);
 }
 void free_var(Var *p)
@@ -2188,10 +2218,10 @@ Var *find_ext_var(char *identifier)
   for(v=first_ext;v;v=v->next){
     if(!strcmp(v->identifier,identifier)) return v;
 #ifdef HAVE_MISRA
-    if(misracheck&&l>31){
-      if(!strncmp(v->identifier,identifier,31))
-		misra_neu(11,5,1,0,v->identifier,identifier);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
   }
@@ -2210,10 +2240,10 @@ Var *find_var(char *identifier,int endnesting)
       if(!strcmp(v->identifier,identifier))
 	return v;
 #ifdef HAVE_MISRA
-      if(misracheck&&l>31){
-		if(!strncmp(v->identifier,identifier,31))
-			misra_neu(11,5,1,0,v->identifier,identifier);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     }
   }
@@ -2229,8 +2259,8 @@ Var *find_var(char *identifier,int endnesting)
 
 
 #ifdef HAVE_MISRA
-int misra_92_violation = 0;
-int misra_92_violation_line = 0;
+/* removed */
+/* removed */
 #endif
 
 
@@ -2255,7 +2285,7 @@ int check_zero_initialisation(const_list* cl, int typ)
    or if a table copy should be used first */
 int use_only_dyn_init(zmax sz,zmax dyn_sz,zmax const_sz,int dyn_cnt,int const_cnt)
 {
-  if(zmleq(sz,l2zm(32L)))
+  if(zmleq(sz,l2zm(clist_copy_stack)))
     return 1;
   if(zmeqto(dyn_sz,l2zm(0L)))
     return 0;
@@ -2288,7 +2318,7 @@ void init_local_compound(Var *v)
     }else{
       /*  Array etc.  */
       Var *nv;
-      if(!use_only_dyn_init(szof(v->vtyp),init_dyn_sz,init_const_sz,init_dyn_cnt,init_const_cnt)){
+      if(!ISSCALAR(v->vtyp->flags)&&!use_only_dyn_init(szof(v->vtyp),init_dyn_sz,init_const_sz,init_dyn_cnt,init_const_cnt)){
 	nv=add_var(empty,clone_typ(v->vtyp),STATIC,v->clist);
 	nv->flags|=DEFINED;
 	nv->dfilename=filename;
@@ -2310,9 +2340,9 @@ void init_local_compound(Var *v)
 }
 
 #ifdef HAVE_MISRA
-int misra_oldstyle_def = 0;
-int	misra_return_count = 0;
-int	misra_statement_after_return = 0;
+/* removed */
+/* removed */
+/* removed */
 #endif
 
 void var_declaration(void)
@@ -2324,22 +2354,23 @@ void var_declaration(void)
     had_decl,hard_reg,mhr,diffunit=0,inline_flag;
   Var *v;
   char *vattr;
+  zumax mask;
   int base_type;
 #ifdef HAVE_TARGET_ATTRIBUTES
   unsigned long tattr;
 #endif
 #ifdef HAVE_ECPP
-  argument_list *ecpp_ctor_args=0;
-  if(ecpp){
-    if(ecpp_linkage_specification())return;
-  }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   ts=declaration_specifiers();notdone=1;
 
-  storage_class=return_sc;hard_reg=return_reg;vattr=return_vattr;
+  storage_class=return_sc;hard_reg=return_reg;vattr=return_vattr;mask=return_mask;
   inline_flag=return_inline;
 #ifdef HAVE_ECPP
-  if(ecpp&&ecpp_ret_flags&ECPP_VIRTUAL)error(339);
+/* removed */
 #endif
   if(for_decl&&storage_class!=0&&storage_class!=AUTO&&storage_class!=REGISTER){
     error(299);
@@ -2368,7 +2399,7 @@ void var_declaration(void)
       makeint=1;
       if(!storage_class) storage_class=EXTERN;
 #ifdef HAVE_MISRA
-      misra_neu(75,8,2,0);
+/* removed */
 #endif
       error(67);
     }else{
@@ -2389,11 +2420,11 @@ void var_declaration(void)
     if(old) {freetyp(old);old=0;}
     t=declarator(clone_typ(ts));
 #ifdef HAVE_ECPP
-    if(ecpp&&current_func&&ctok->type==LPAR&&ISSTRUCT(t->flags)){
-      /* ctor call (e.g. A a(23,21);)*/
-      /* FIXME - this could still be a local function declaration returning a class type! */
-      ecpp_ctor_args=argument_list_expression();
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 #ifdef HAVE_EXT_TYPES
     conv_typ(t);
@@ -2404,7 +2435,7 @@ void var_declaration(void)
     }else{
         isfunc=1;
 #ifdef HAVE_MISRA
-        if(oldnesting!=0) misra_neu(68,8,6,0);
+/* removed */
 #endif
         if(storage_class!=STATIC&&storage_class!=TYPEDEF) storage_class=EXTERN;
     }
@@ -2420,15 +2451,15 @@ void var_declaration(void)
       /*FIXME: check auf doppelte Def. */
     }
 #ifdef HAVE_MISRA
-    if ( (v) && (ISFUNC(v->vtyp->flags)) ) {
-      if (v->vtyp->exact->count == 0) misra_oldstyle_def=1;
-    }
-
-    if(misracheck&&extern_flag&&storage_class==EXTERN&&cross_module){
-      Var *ov=find_ext_var(vident);
-      if(ov&&strcmp(ov->filename,filename))
-        misra_neu(27,8,8,0,vident);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(v){
       had_decl=1;
@@ -2444,7 +2475,7 @@ void var_declaration(void)
 	    else
 	      error(68,vident);
 #ifdef HAVE_MISRA
-            misra_neu(26,8,4,0,vident);
+/* removed */
 #endif
           }
           if((storage_class!=v->storage_class&&!extern_flag)||hard_reg!=v->reg)
@@ -2461,13 +2492,10 @@ void var_declaration(void)
         }
 #endif
         if(vattr){
-          if(v->vattr){
-            v->vattr=myrealloc(v->vattr,strlen(v->vattr)+strlen(vattr)+2);
-            strcat(v->vattr,";");
-            strcat(v->vattr,vattr);
-          }else v->vattr=vattr;
+	  add_attr(&v->vattr,vattr);
           if(ISFUNC(v->vtyp->flags)) fi_from_attr(v);
         }
+
         if(!isfunc){
           if(!ISARRAY(t->flags)||!zmeqto(t->size,l2zm(0L))){
             free(v->vtyp);
@@ -2483,23 +2511,32 @@ void var_declaration(void)
     }else{
       had_decl=0;
 #ifdef HAVE_MISRA
-      if ((isfunc) && (ctok->type!=SEMIC)) misra_neu(71,8,1,0);
+/* removed */
 #endif
       if(isfunc&&ctok->type!=COMMA&&ctok->type!=SEMIC&&ctok->type!=RPAR&&ctok->type!=ASGN&&nesting>0) nesting--;
       v=add_var(vident,t,storage_class,0);
 #ifdef HAVE_ECPP
-      if(ecpp&&ISSTRUCT(v->vtyp->flags)&&!(v->vtyp->exact->ecpp_flags&ECPP_POD)){
-        np p=new_node();
-        p->flags=ADDRESS;
-        p->left=new_node();
-        p->left->flags=IDENTIFIER;
-        p->left->identifier=add_identifier(v->identifier,strlen(v->identifier));
-        ecpp_call_ctor(v->vtyp->exact,p,ecpp_ctor_args);
-        ecpp_auto_dtor(v);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       v->reg=hard_reg;
-      v->vattr=vattr;
+      if(vattr)
+	add_attr(&v->vattr,vattr);
+      if(!zumeqto(mask,ul2zum(0UL))){
+	char *new=mymalloc(strlen(v->identifier)+16);
+	strcpy(new,v->identifier);
+	strcat(new,".");
+	sprintf(new+strlen(new),"%lu",zum2ul(mask));
+	v->identifier=add_identifier(new,strlen(new));
+	free(new);
+      }
       if(ISFUNC(v->vtyp->flags))
         fi_from_attr(v);
 #ifdef HAVE_TARGET_ATTRIBUTES
@@ -2524,27 +2561,27 @@ void var_declaration(void)
       if(extern_flag) v->flags|=INLINEEXT;
     }
 #ifdef HAVE_MISRA
-    if(isfunc&&misracheck&&t->exact->count>1){
-      int i,noid=!*(*t->exact->sl)[0].identifier;
-      for(i=1;i<t->exact->count;i++) {
-        if(i==t->exact->count-1&&(((*t->exact->sl)[i].styp->flags&NQ))==VOID)
-          break;
-        if(!(* (*t->exact->sl)[i].identifier)!=noid){
-          misra_neu(73,0,0,0);
-          break;
-        }
-      }
-    } else if (isfunc&&misracheck) {
-      int i;
-      for (i=0;i<t->exact->count;i++) {
-        if(i==t->exact->count-1&&(((*t->exact->sl)[i].styp->flags&NQ))==VOID)
-          break;
-        if(!(* (*t->exact->sl)[i].identifier)){
-          misra_neu(73,16,3,0);
-          break;
-        }                
-      }
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(disallow_statics&&v->storage_class==STATIC&&*v->identifier&&!is_const(v->vtyp))
       error(302,v->identifier);
@@ -2556,6 +2593,7 @@ void var_declaration(void)
       if(v->fi){free(v->fi->inline_asm);v->fi->inline_asm=0;}
       if(!v->fi) v->fi=new_fi();
       v->fi->inline_asm=get_string();
+      /*STRBACK(v->fi->inline_asm);*/
       mdef=1;
     }else{
       /*if(v->fi){free(v->fi->inline_asm);v->fi->inline_asm=0;}*/
@@ -2573,11 +2611,11 @@ void var_declaration(void)
         v->dfilename=filename;
         v->dline=line;
 #ifdef HAVE_MISRA
-        {
-          char* teststr = v->dfilename;
-          teststr+=(strlen(teststr)-2);
-          if (strcmp(teststr,".c")) misra_neu(87,8,5,0);
-        }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       }
       if(v->storage_class==TYPEDEF) error(114,v->identifier);
@@ -2589,8 +2627,8 @@ void var_declaration(void)
         if(v->storage_class!=EXTERN){ error(77);v->storage_class=EXTERN;}
       }
 #ifdef HAVE_MISRA
-      misra_92_violation = 0;                        /* No MISRA Rule 9.2 violation so far*/
-      misra_92_violation_line = 0;                /* Store line information for error reporting */
+/* removed */
+/* removed */
 #endif
       init_dyn_sz=l2zm(0L);
       init_dyn_cnt=0;
@@ -2599,12 +2637,12 @@ void var_declaration(void)
       v->clist=initialization(v->vtyp,v->storage_class==AUTO||v->storage_class==REGISTER,0,0,0,0);
                 /* MISRA Rule 9.2 violation checking and error reporting */
 #ifdef HAVE_MISRA
-      if ((misracheck) && (misra_92_violation)){
-        if (v->clist) {
-          misra_92_violation = !(check_zero_initialisation(v->clist,get_first_base_type(v->vtyp)));
-        }
-        if (misra_92_violation) misra_neu(31,9,2,misra_92_violation_line);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       if(v->clist){
         if(ISARRAY(v->vtyp->flags)&&zmeqto(v->vtyp->size,l2zm(0L))){
@@ -2647,8 +2685,8 @@ void var_declaration(void)
     int i,oldstyle=0;
 
 #ifdef HAVE_MISRA
-    if (misra_oldstyle_def) misra_neu(71,8,1,0);
-    misra_oldstyle_def = 0;
+/* removed */
+/* removed */
 #endif
 #ifdef HAVE_REGPARMS
     treg_handle reg_handle;
@@ -2659,6 +2697,7 @@ void var_declaration(void)
       for(i=1;i<=MAXR;i++) {regs[i]=regused[i]=regsa[i];regsbuf[i]=0;}
     }
     cur_func=v->identifier;
+    cur_funcv=v;
     if(only_inline==2) only_inline=0;
     if(nesting<1) enter_block();
     if(nesting>1) error(32);
@@ -2676,11 +2715,11 @@ void var_declaration(void)
       v->dfilename=filename;
       v->dline=line;
 #ifdef HAVE_MISRA
-      {
-        char* teststr = v->dfilename;
-        teststr+=(strlen(teststr)-2);
-        if (strcmp(teststr,".c")) misra_neu(87,8,5,0);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     }
     if(storage_class!=EXTERN&&storage_class!=STATIC) error(34);
@@ -2746,6 +2785,7 @@ void var_declaration(void)
       sl[0].styp=new_typ();
       sl[0].styp->flags=VOID;
       sl[0].styp->next=0;
+      sl[0].reg=0;
       nesting--;
       add_sl(t->exact,&sl);
       nesting++;
@@ -2753,7 +2793,7 @@ void var_declaration(void)
     if(om&&om->exact&&!compare_sd(om->exact,t->exact)) {
       error(123);
 #ifdef HAVE_MISRA
-      misra_neu(72,8,3,0);
+/* removed */
 #endif
     }
     nocode=0;currentpri=1;
@@ -2791,7 +2831,9 @@ void var_declaration(void)
       }
     }
     first_ic=last_ic=0;ic_count=0;max_offset=l2zm(0L);
+    if(!zmleq(local_offset[1],Z0)) max_offset=local_offset[1];
     for(i=0;i<t->exact->count;i++){
+      /* TODO: missing pointer for struct return */
 #ifdef HAVE_REGPARMS
       int didrp=0;
       if((*t->exact->sl)[i].styp){
@@ -2804,7 +2846,7 @@ void var_declaration(void)
       if(!(*t->exact->sl)[i].styp&&*(*t->exact->sl)[i].identifier){
         type *nt;
 #ifdef HAVE_MISRA
-        misra_neu(71,8,1,0);
+/* removed */
 #endif
         nt=new_typ();
         nt->flags=INT;
@@ -2833,7 +2875,7 @@ void var_declaration(void)
         tmp->dline=line;
         if(oldstyle){
 #ifdef HAVE_MISRA
-          misra_neu(71,8,1,0);
+/* removed */
 #endif
           freetyp((*t->exact->sl)[i].styp);
           (*t->exact->sl)[i].styp=0; /*  Prototype entfernen */
@@ -2849,18 +2891,18 @@ void var_declaration(void)
     if(v->storage_class==EXTERN&&(v->flags&INLINEFUNC))
       disallow_statics=1;
 #ifdef HAVE_ECPP
-    current_class=0;
-    if(ecpp) current_func=v->vtyp;
-    if(ecpp&&ISFUNC(v->vtyp->flags)&&v->vtyp->exact->ecpp_flags&ECPP_CTOR){
-      ecpp_ctor_init_list(v->vtyp->exact,0);
-    }
-    if(ecpp&&current_func->ecpp_flags&ECPP_DTOR){
-      ecpp_dtor_prolog();
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 #ifdef HAVE_MISRA
-    misra_return_count = 0;
-    misra_statement_after_return = 0;
+/* removed */
+/* removed */
 #endif
 
     if(c99){
@@ -2883,17 +2925,18 @@ void var_declaration(void)
     compound_statement();
 
 #ifdef HAVE_MISRA
-    if ((misra_statement_after_return) || (misra_return_count>1)) misra_neu(82,14,7,0); 
+/* removed */
 #endif
 #ifdef HAVE_ECPP
-    if(ecpp){
-      ecpp_auto_call_dtors();
-      if(current_func->ecpp_flags&ECPP_DTOR){
-        ecpp_dtor_epilog();
-      }
-      current_func=0;
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
+    cur_funcv=0;
     disallow_statics=0;
     if(block_vla[nesting]) clearvl();
     if((v->vtyp->next->flags&NQ)!=VOID&&!has_return){
@@ -3056,9 +3099,10 @@ int compare_sd(struct_declaration *a,struct_declaration *b)
   if(a->count!=b->count) return(0);
   for(i=0;i<a->count;i++){
     if((*a->sl)[i].styp&&(*b->sl)[i].styp&&!compatible_types((*a->sl)[i].styp,(*b->sl)[i].styp,NU)) return(0);
+    if((*a->sl)[i].reg!=(*b->sl)[i].reg) {error(368);return 0;}
 #ifdef HAVE_MISRA
-    if(misracheck&&*(*a->sl)[i].identifier&&*(*b->sl)[i].identifier&&strcmp((*a->sl)[i].identifier,(*b->sl)[i].identifier))
-      misra_neu(74,16,4,0);
+/* removed */
+/* removed */
 #endif
   }
   return(1);
@@ -3277,6 +3321,16 @@ void gen_clist(FILE *f,type *t,const_list *cl)
 /*  Generiert dc fuer const_list.                           */
 {
   int i,bfo,bfs;zmax sz;zumax bfval=ul2zum(0UL);
+
+#if 0
+  for(i=0;i<(int)szof(t);i++){
+    zuchar c;int s;
+    s=get_clist_byte(t,cl,i,&c);
+    printf("%03d: 0x%02x (%d)\n",i,(int)c,s);
+  }
+#endif
+
+
   if(ISARRAY(t->flags)){
     for(sz=l2zm(0L);!zmleq(t->size,sz)&&cl;cl=cl->next){
       if(!cl->other){ierror(0);return;}
@@ -3494,6 +3548,7 @@ Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg
     }
     (*sd->sl)[args-1].styp=new_typ();
     (*sd->sl)[args-1].styp->flags=VOID;
+    (*sd->sl)[args-1].reg=0;
     t=new_typ();
     t->flags=FUNKT;
     t->exact=add_sd(sd,FUNKT);
@@ -3528,7 +3583,7 @@ const_list *initialization(type *t,int noconst,int level,int desi,struct_declara
   if(ctok->type==LBRA){next_token();killsp();bracket=1;} else bracket=0;
   if(ISARRAY(f)){
 #ifdef HAVE_MISRA
-    if(!bracket) { misra_92_violation = 1; if (!misra_92_violation_line) misra_92_violation_line = ctok->line; } /* possible MISRA Rule 9.2 violation */
+/* removed */
 #endif
     if(t->dsize){
       error(358);
@@ -3588,17 +3643,17 @@ const_list *initialization(type *t,int noconst,int level,int desi,struct_declara
       if(bracket&&zmeqto(i,l2zm(0L))) error(360);
 
 #ifdef HAVE_MISRA
-          /* MISRA 9.2 -- Check if all array fields are initialised. Can be removed without problems if not needed */
-          if ( (zmleq(i,t->size)) && (!zmeqto(t->size,i)) ) {   /* not all array-fields are initialised */
-                misra_92_violation =1; if (!misra_92_violation_line) misra_92_violation_line = ctok->line;
-          }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     }
   }else if(ISSTRUCT(f)&&(bracket||!noconst||c99)){
     if(t->exact->count<=0)
       {error(43);return(0);}
 #ifdef HAVE_ECPP
-    if(ecpp&&t->exact->ecpp_flags&ECPP_VIRTUAL){error(342,t->exact->identifier);return(0);}
+/* removed */
 #endif
     prev=0;
     if(level==0&&!bracket&&!c99) error(157);
@@ -3652,10 +3707,10 @@ const_list *initialization(type *t,int noconst,int level,int desi,struct_declara
     if(bracket&&zmeqto(i,l2zm(0L))) error(360);
 
 #ifdef HAVE_MISRA
-          /* MISRA 9.2 -- Check if all fields are initialised. Can be removed without problems if not needed */
-          if ( (zmleq(i,t->exact->count)) && (!zmeqto(t->exact->count,i)) ) {   /* not all struct-fields are initialised */
-                misra_92_violation =1; if (!misra_92_violation_line) misra_92_violation_line = ctok->line;
-          }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
   }else if(ISUNION(f)&&(c99||bracket||!noconst)){
@@ -3712,7 +3767,7 @@ const_list *initialization(type *t,int noconst,int level,int desi,struct_declara
 
     if(!tree){error(45);return(0);}
     if(!noconst) const_expr=1;
-    if(!type_expression(tree,0)){free_expression(tree); const_expr=oldconst;return 0;}
+    if(!type_expression(tree,t)){free_expression(tree); const_expr=oldconst;return 0;}
     const_expr=oldconst;
 
     tree=makepointer(tree);
@@ -3798,896 +3853,896 @@ const_list *initialization(type *t,int noconst,int level,int desi,struct_declara
   return(first);
 }
 #ifdef HAVE_ECPP
-char* ecpp_mangle_name(type *t,char *identifier,struct_declaration *higher_nesting) {
-  /* FIXME: mangled names don't have a static limit to their size*/
-  /* buff should grow when required */
-	/* if identifier=="_ZTV", the name for a virtual table will be created */
-  static char buff[2048];
-  char *pos=buff;
-  int i;
-  if(!higher_nesting&&t->exact&&t->exact->higher_nesting){
-    higher_nesting=t->exact->higher_nesting;
-  }
-  /*if(t->exact&&t->exact->higher_nesting){
-    if(higher_nesting)ierror(0);
-    higher_nesting=t->exact->higher_nesting;
-  }*/
-  if(identifier&&!strcmp(identifier,"_ZTV")){
-    /* vtable */
-    memset(buff,0,sizeof(char)*2048);
-    *pos++='_';*pos++='Z';*pos++='T';*pos++='V';
-    pos=ecpp_mangle_nested_identifier(pos,t->exact);
-    return buff;
-  }
-  if(!ISFUNC(t->flags)&&!higher_nesting&&!t->ecpp_flags&ECPP_STATIC){
-    /* no mangling */
-    strcpy(buff,identifier);
-    return buff;
-  }
-  memset(buff,0,sizeof(char)*2048);
-  *pos++='_';
-  *pos++='Z';
-  if(higher_nesting){
-    *pos++='N';
-    pos=ecpp_mangle_nested_identifier(pos,higher_nesting);
-    if(t->ecpp_flags&ECPP_CTOR){
-      *pos++='C'; *pos++='1';
-    }else if(t->ecpp_flags&ECPP_DTOR){
-      *pos++='D'; *pos++='1';
-    }else{
-    pos+=sprintf(pos,"%d%s",strlen(identifier),identifier);
-    }
-    *pos++='E';
-  }else{
-    pos+=sprintf(pos,"%d%s",strlen(identifier),identifier);
-  }
-  if(ISFUNC(t->flags)){
-    int hasthisp=0;
-    hasthisp=(t->exact->higher_nesting&&!(t->ecpp_flags&ECPP_STATIC));
-    if(t->exact->count==hasthisp){
-      *pos++='z';
-    }else if(t->exact->count==1+hasthisp&&(*t->exact->sl)[hasthisp].styp->flags==VOID){
-      *pos++='v';
-    }else{
-      for(i=hasthisp;i<t->exact->count-1;++i){
-        pos=ecpp_mangle_arg(pos,(*t->exact->sl)[i].styp);
-      }
-      if((*t->exact->sl)[t->exact->count-1].styp->flags!=VOID){
-        pos=ecpp_mangle_arg(pos,(*t->exact->sl)[i].styp);
-        *pos++='z';
-      }
-    }
-  }
-   return buff;
-}
-char* ecpp_mangle_arg(char *pos,type *t) {
-  int f;
-  int i;
-  struct_declaration *higher_nesting=0;
-  if(!t)return pos;
-  f=t->flags&NQ;
-  if(t->exact&&t->exact->higher_nesting)higher_nesting=t->exact->higher_nesting;
-  if(t->flags&KONST)*pos++='K';
-  switch(f){
-    case CHAR:
-      if(t->flags&UNSIGNED)*pos++='h';
-      else *pos++='c';
-      break;
-    case SHORT:
-      if(t->flags&UNSIGNED)*pos++='t';
-      else *pos++='s';
-      break;
-    case INT:
-      if(t->flags&UNSIGNED)*pos++='j';
-      else *pos++='i';
-      break;
-    case LONG:
-     if(t->flags&UNSIGNED)*pos++='m';
-      else *pos++='l';
-      break;
-    case LLONG:
-     if(t->flags&UNSIGNED)*pos++='y';
-      else *pos++='x';
-      break;
-    case FLOAT: *pos++='f';break;
-    case DOUBLE: *pos++='d';break;
-    case LDOUBLE: *pos++='e';break;
-    case VOID: *pos++='v';break;
-  case POINTER:
-      *pos++='P';
-      pos=ecpp_mangle_arg(pos,t->next);
-      break;
-    case ARRAY:
-      *pos++='A';
-      pos+=sprintf(pos,"%d",t->size);
-      *pos++='_';
-      pos=ecpp_mangle_arg(pos,t->next);
-      break;
-    case STRUCT:
-    case UNION:
-    case ENUM:
-      if(higher_nesting){
-        *pos++='N';
-        pos=ecpp_mangle_nested_identifier(pos,higher_nesting);
-      }
-      pos+=sprintf(pos,"%d%s",strlen(t->exact->identifier),t->exact->identifier);
-      if(higher_nesting){
-        *pos++='E';
-      }
-      break;
-    case FUNKT:
-      *pos++='F';
-      if(higher_nesting){
-        *pos++='N';
-        pos=ecpp_mangle_nested_identifier(pos,higher_nesting);
-        *pos++='E';
-      }
-      if(t->exact->count==1){
-        *pos++='v';
-      }else for(i=0;i<t->exact->count-1;++i){
-        ecpp_mangle_arg(pos,(*t->exact->sl)[i].styp);
-      }
-      *pos++='E';
-      break;
-  }
-  return pos;
-}
-char* ecpp_mangle_nested_identifier(char *pos,struct_declaration *sd){
-  if(sd->higher_nesting){
-    pos=ecpp_mangle_nested_identifier(pos,sd->higher_nesting);
-  }
-	if(!sd->identifier){ierror(0);}
-	pos+=sprintf(pos,"%d%s",strlen(sd->identifier),sd->identifier);
-  return pos;
-}
-Var *ecpp_find_ext_var(char *identifier)
-{
-  Var *v;int l;
-  for(v=first_ext;v;v=v->next){
-    if(ISFUNC(v->vtyp->flags)&&!v->vtyp->exact->higher_nesting&&
-    v->vtyp->exact->identifier&&!strcmp(v->vtyp->exact->identifier,identifier)){
-      /* for non-method functions search for the unmangled name */
-      return v;
-    }else{
-      if(!strcmp(v->identifier,identifier)) return v;
-    }
-  }
-  return 0;
-}
-Var *ecpp_find_var(char *identifier)
-/*  Searches local variables */
-{
-  int i;Var *v;
-  int endnesting=0;
-  if(identifier==0||*identifier==0) return 0;
-  for(i=nesting;i>=endnesting;i--){
-    for(v=first_var[i];v;v=v->next){
-      if(ISFUNC(v->vtyp->flags)){
-        if(!strcmp(v->vtyp->exact->identifier,identifier)) return v;
-      }else{
-        if(!strcmp(v->identifier,identifier)) return v;
-      }
-    }
-  }
-  return 0;
-}
-int ecpp_is_member_struct(struct_list *sl,struct_declaration *sd)
-{
-  if(!ISSTRUCT(sl->styp->flags))return 0;
-  if(sl->styp->exact->higher_nesting==sd&&(!sl->identifier||!*sl->identifier))return 0;
-  return 1;
-}
-struct_declaration *ecpp_find_struct(char* identifier,struct_declaration *scope,int search_flag)
-/* search_flag: 0->only search scope, 1->scope and its bases */
-/* 2->scope,bases,higher_nestings and bases of those */
-{
-  int i;
-  struct_declaration* leaf_scope;
-  leaf_scope=scope;
-  if(!identifier||*identifier==0){ierror(0);return 0;}
-  if(!scope) return find_struct(identifier,0);
-  if(!strcmp(scope->identifier,identifier))return scope;
-  while(scope){
-    for(i=0;i<scope->count;++i){
-      if((*scope->sl)[i].styp->ecpp_flags&ECPP_NESTED_CLASS&&!strcmp((*scope->sl)[i].styp->exact->identifier,identifier))
-        return (*scope->sl)[i].styp->exact;
-    }
-    if((search_flag==1||search_flag==2)&&scope->base_class){
-      scope=scope->base_class;
-    }else if(search_flag==2){
-      leaf_scope=leaf_scope->higher_nesting;
-      scope=leaf_scope;
-    }
-    else scope=0;
-  }
-  return 0;
-}
-struct_declaration *ecpp_find_scope(char* nested_name,char** identifier)
-/* if <identifier> is given, it will contain the "rightmost" identifier of the name */
-/* if the name is a type, <identifier> will contain 0 */
-/* e.g. if g is a global function, A is a class, f is a member of A, B is a class nested in A: */
-/* <nested_name> -> (<return-value>, <*identifier>) */
-/* g->(0,g); A->(A,0); A:f->(A,f); A:B->(B,0); A:A->(A,A); */
-{
-  static char buff[MAXI];
-  char *pos=buff;
-  struct_declaration *scope;
-  struct_declaration *cc;
-  int searchflag=2;
-  if(!nested_name||!nested_name[0]){ierror(0);return;}
-  memset(buff,0,MAXI*sizeof(char));
-  scope=0;
-  if(current_func)cc=current_func->exact->higher_nesting;
-  else cc=current_class;
-  for(;;){
-    if(*nested_name==0){
-      struct_declaration *merk_scope=scope;
-      *pos=0;
-      if(identifier)*identifier=buff;
-      if(cc){
-        scope=ecpp_find_struct(buff,cc,searchflag);
-        if(scope){if(identifier)*identifier=0;return scope;}
-        if(ecpp_find_member(buff,cc,&scope,searchflag))return scope;
-      }
-      scope=ecpp_find_struct(buff,scope,searchflag);
-      if(scope){if(identifier)*identifier=0;return scope;}
-      return merk_scope;
-    }else if(*nested_name==':'){
-      *pos=0;
-      if(pos==buff){
-        scope=0;cc=0;
-      }else{
-        if(cc){
-          scope=ecpp_find_struct(buff,cc,searchflag);
-          cc=0;
-          if(!scope)scope=ecpp_find_struct(buff,0,searchflag);
-        }else{
-          scope=ecpp_find_struct(buff,scope,searchflag);
-        }
-        if(*(nested_name+1)==0||*(nested_name+1)==':'){
-          /*error(341);*/return scope;}
-        if(!scope){
-          error(337,buff);
-          return 0;
-        }
-      }
-      searchflag=1;
-      pos=buff;nested_name++;
-    }else{
-      *pos++=*nested_name++;
-    }
-  }
-  return 0;
-}
-struct_list *ecpp_find_member(char* identifier,struct_declaration *scope,struct_declaration** ret_scope,int search_flag)
-/* search_flag: 0->only search scope, 1->scope and its bases */
-/* 2->scope,bases,higher_nestings and bases of those */
-{
-  int i;
-  struct_declaration* leaf_scope;
-  if(!scope||!identifier||*identifier==0){ierror(0);return 0;}
-  leaf_scope=scope;
-  while(scope){
-    for(i=0;i<scope->count;++i){
-      if(!strcmp((*scope->sl)[i].identifier,identifier)){
-        if(ret_scope)*ret_scope=scope;
-        return &(*scope->sl)[i];
-      }
-    }
-    if((search_flag==1||search_flag==2)&&scope->base_class){
-      scope=scope->base_class;
-    }else if(search_flag==2){
-      leaf_scope=leaf_scope->higher_nesting;
-      scope=leaf_scope;
-    }
-    else scope=0;
-  }
-  if(ret_scope)*ret_scope=0;
-  return 0;
-}
-void ecpp_add_this_pointer(struct_declaration *decl){
-  if(!decl->higher_nesting){ierror(0);return;}
-  decl->count++;
-  decl->sl=myrealloc(decl->sl,decl->count*sizeof(struct_list));
-  memmove(&(*decl->sl)[1],&(*decl->sl)[0],(decl->count-1)*sizeof(struct_list));
-  (*decl->sl)[0].identifier=add_identifier("this",4);
-  (*decl->sl)[0].styp=new_typ();
-  (*decl->sl)[0].styp->flags=POINTER;
-  (*decl->sl)[0].styp->next=new_typ();
-  (*decl->sl)[0].styp->next->flags=STRUCT;
-  (*decl->sl)[0].styp->next->exact=decl->higher_nesting;
-  (*decl->sl)[0].align=falign((*decl->sl)[0].styp);
-  (*decl->sl)[0].bfoffset=-1;
-  (*decl->sl)[0].bfsize=-1;
-  (*decl->sl)[0].storage_class=AUTO;
-  (*decl->sl)[0].reg=0;
-}
-type *ecpp_declarator(type *t)
-/* Subroutine for declarator(), returns 0 on error */
-/* creates the mangled identifier, creates this pointer arg and sets nesting */
-{
-  struct_declaration *scope;
-  char *mname;
-  char *id;
-  int merk_nesting;
-  int domangle=0;
-  int addthisarg=0;
-  t->ecpp_flags|=ecpp_access;
-  t->ecpp_flags|=ecpp_ret_flags;
-  if(!ident||!*ident)return t;
-  if(t->exact) t->exact->ecpp_flags|=ecpp_ret_flags;
-  ecpp_ret_flags&=~(ECPP_CTOR|ECPP_DTOR);
-  if(!ISFUNC(t->flags)&&t->ecpp_flags&ECPP_VIRTUAL)error(339);
-  scope=ecpp_find_scope(ident,&id);
-  if(id)strncpy(ident,id,MAXI);
-  if(t->ecpp_flags&ECPP_CTOR||(id&&scope&&!strcmp(id,scope->identifier))){
-    t->ecpp_flags|=ECPP_CTOR;
-    strcpy(ident,"__ctor");
-    if((t->next->flags&NQ)!=VOID&&((t->next->flags&NQ)!=INT))ierror(0); /* FIXME: assert that NO return type was specified */
-    t->next->flags=VOID;
-  }
-  if(t->ecpp_flags&ECPP_DTOR){
-    strcpy(ident,"__dtor");
-    if((t->next->flags&NQ)!=VOID&&((t->next->flags&NQ)!=INT))ierror(0); /* FIXME: assert that NO return type was specified */
-  }
-  if(!scope)scope=current_class;
-  if(!current_class&&scope&&id){
-    /* external method/static member: assert previous declaration and inherit flags */
-    struct_list *sl;
-    int hasthisp;
-    if(ISFUNC(t->flags)){
-      int i;
-      int ok=0;
-      for(i=0;i<scope->count;++i){
-        int j;
-        sl=&(*scope->sl)[i];
-        if(strcmp(ident,sl->identifier))continue;
-        if(!ISFUNC(sl->styp->flags)){error(348);return t;}
-        hasthisp=!(sl->styp->ecpp_flags&ECPP_STATIC);
-        if(t->exact->count!=sl->styp->exact->count-hasthisp)continue;
-        ok=1;
-        for(j=0;j<t->exact->count;++j){
-          type *t1,*t2;
-          t1=(*t->exact->sl)[j].styp;
-          t2=(*sl->styp->exact->sl)[j+hasthisp].styp;
-          if(!compatible_types(t1,t2,NU|CONST|VOLATILE)){ok=0;break;}
-        }
-        if(ok)break;
-      }
-      if(!ok){error(349);return t;}
-      t->ecpp_flags=sl->styp->ecpp_flags;
-      t->exact->ecpp_flags|=sl->styp->ecpp_flags;
-      /* FIXME: free t->exact */
-      for(i=0;i<t->exact->count;++i){
-        char *id=(*t->exact->sl)[i].identifier;
-        (*sl->styp->exact->sl)[i+hasthisp].identifier=add_identifier(id,strlen(id));
-      }
-      t->exact=sl->styp->exact;
-      strncpy(ident,t->exact->mangled_identifier,MAXI);
-      return t;
-    }else{
-      sl=ecpp_find_member(ident,scope,0,0);
-      if(!sl)return t; /* local var/undeclared identifier*/
-      /* FIXME: check compatability */
-      t->ecpp_flags=sl->styp->ecpp_flags;
-    }
-  }
-  if(!scope){
-    if(ISFUNC(t->flags)){
-      if(ecpp_linkage==ECPP_C_LINKAGE){
-        t->exact->identifier=add_identifier(ident,strlen(ident));
-        t->exact->mangled_identifier=0;
-      }else{
-        Var *v;
-        v=ecpp_find_var(ident);
-        if(!v)v=ecpp_find_ext_var(ident);
-        if(!v){
-          domangle=1;
-        }
-          domangle=1;
-      }
-    }else{}
-  }else{
-    if(ISFUNC(t->flags)&&t->ecpp_flags&ECPP_FRIEND){
-      Var *v;
-      if(scope==current_class){
-        v=ecpp_find_var(ident);
-        if(!v)v=ecpp_find_ext_var(ident);
-        if(!v){
-          mname=ecpp_mangle_name(t,ident,0);
-          v=add_var(mname,t,EXTERN,0);
-          merk_nesting=nesting;
-          nesting=0;
-          t->exact->identifier=add_identifier(ident,strlen(ident));
-          t->exact->mangled_identifier=add_identifier(mname,strlen(mname));
-          nesting=merk_nesting;
-          strncpy(ident,mname,MAXI);
-        }else{
-          /* TODO: check compatabiblity, find correct overloaded version */
-          freetyp(t);
-          t=clone_typ(v->vtyp);
-          t->ecpp_flags|=ECPP_FRIEND;
-        }
-      }else{
-        struct_list *sl;
-        sl=ecpp_find_member(ident,scope,0,1);
-        if(!sl)ierror(0); /* FIXME: member not found */
-        if(!ISFUNC(sl->styp->flags))ierror(0);
-        v=find_ext_var(sl->styp->exact->mangled_identifier);
-        /* TODO: check compatabiblity, find correct overloaded version */
-        freetyp(t);
-        t=clone_typ(v->vtyp);
-        t->ecpp_flags|=ECPP_FRIEND;
-      }
-    }else{
-      if(ISFUNC(t->flags)){
-        domangle=1;
-      }
-      if(t->ecpp_flags&ECPP_STATIC&&!current_class){
-        domangle=1;
-      }
-      if(ISFUNC(t->flags)) t->exact->higher_nesting=scope;
-      if(ISFUNC(t->flags)&&!(t->ecpp_flags&ECPP_STATIC)){
-        addthisarg=1;
-      }
-    }
-  }
-  if(addthisarg) ecpp_add_this_pointer(t->exact);
-  if(domangle){
-    if(ISFUNC(t->flags)) mname=ecpp_mangle_name(t,ident,0);
-    else mname=ecpp_mangle_name(t,ident,scope);
-    merk_nesting=nesting;
-    nesting=0;
-    if(ISFUNC(t->flags)){
-      t->exact->identifier=add_identifier(ident,strlen(ident));
-      t->exact->mangled_identifier=add_identifier(mname,strlen(mname));
-    }
-    nesting=merk_nesting;
-    strncpy(ident,mname,MAXI);
-  }
-  return t;
-}
-int ecpp_linkage_specification()
-/* handles a linkage specification (e.g. extern "C" ...) */
-/* FIXME: when not followed by {...}, the single declaration autom. has */
-/* storage_class extern and must have no other storage_class specifiers */
-/* FIXME: redeclaration of the same name with different linkage is an error */
-{
-  token mtok;
-  if(ctok->type!=NAME||strcmp(ctok->name,"extern"))return 0;
-  copy_token(&mtok,ctok);
-  next_token();
-  killsp();
-  if(ctok->type==T_STRING){
-    if(strcmp(ctok->name,"\"C\"")){error(343,ctok->name);return 1;}
-    next_token();
-    killsp();
-    if(ctok->type==LBRA){
-      int merk_linkage=ecpp_linkage;
-      next_token();
-      killsp();
-      ecpp_linkage=ECPP_C_LINKAGE;
-      while(declaration(0)){
-        var_declaration();
-        killsp();
-      }
-      ecpp_linkage=merk_linkage;
-      if(ctok->type!=RBRA){error(0);return 1;}
-      next_token();
-      killsp();
-      return 1;
-    }else{
-      int merk_linkage=ecpp_linkage;
-      if(!declaration(0)){error(0);return 1;}
-      ecpp_linkage=ECPP_C_LINKAGE;
-      var_declaration();
-      ecpp_linkage=merk_linkage;
-      return 1;
-    }
-  }
-  push_token(&mtok);
-  free(mtok.name);
-  return 0;
-}
-void ecpp_call_ctor(struct_declaration *sd,np this,argument_list *al)
-/* must be called after v has been added, makes the required ctor call */
-{
-  np p;
-  if(sd->ecpp_flags&ECPP_TV)return;
-  if(sd->ecpp_flags&ECPP_POD)return;
-  p=new_node();
-  p->flags=CALL;
-  p->alist=al;
-  p->left=new_node();
-  p->left->flags=DSTRUCT;
-  p->left->left=new_node();
-  p->left->left->flags=CONTENT;
-  p->left->left->left=this;
-  p->left->right=new_node();
-  p->left->right->flags=MEMBER;
-  p->left->right->identifier=add_identifier("__ctor",6);
-
-  if(!type_expression(p,0)){ierror(0);return;}
-  gen_IC(p,0,0);
-  if(p&&(p->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(p->o.reg);
-  free_expression(p);
-}
-void ecpp_auto_dtor(Var *v)
-{
-  ecpp_dtor_list *dl;
-  dl=mymalloc(sizeof(ecpp_dtor_list));
-  dl->var=v;
-  dl->next=ecpp_dlist[nesting];
-  ecpp_dlist[nesting]=dl;
- }
-void ecpp_call_dtor(struct_declaration *sd,np this)
-{
-  np p;
-  if(sd->ecpp_flags&ECPP_POD)return;
-  p=new_node();
-  p->flags=CALL;
-  p->left=new_node();
-  p->left->flags=DSTRUCT;
-  p->left->left=new_node();
-  p->left->left->flags=CONTENT;
-  p->left->left->left=this;
-  p->left->right=new_node();
-  p->left->right->flags=MEMBER;
-  p->left->right->identifier=add_identifier("__dtor",6);
-
-  if(!type_expression(p,0)){ierror(0);return;}
-  gen_IC(p,0,0);
-  if(p&&(p->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(p->o.reg);
-  free_expression(p);
-}
-void ecpp_auto_call_dtors()
-{
-  while(ecpp_dlist[nesting]){
-    ecpp_dtor_list *merk=ecpp_dlist[nesting];
-    np p;
-    p=new_node();
-    p->flags=ADDRESS;
-    p->left=new_node();
-    p->left->flags=IDENTIFIER;
-    p->left->identifier=add_identifier(ecpp_dlist[nesting]->var->identifier,strlen(ecpp_dlist[nesting]->var->identifier));
-    ecpp_call_dtor(ecpp_dlist[nesting]->var->vtyp->exact,p);
-    ecpp_dlist[nesting]=ecpp_dlist[nesting]->next;
-    free(merk);
-  }
-}
-void ecpp_free_init_list(np *initlist,struct_declaration *sd)
-{
-  int i;
-  for(i=0;i<=sd->count;++i)
-    if(initlist[i])free_expression(initlist[i]);
-  free(initlist);
-}
-void ecpp_gen_set_vtable(struct_declaration *class)
-{
-  char *vname;
-  struct_list *sl;
-  if(!class)ierror(0);
-  np p=new_node();
-  p->flags=ASSIGN;
-  p->left=new_node();
-  p->left->flags=DSTRUCT;
-  p->left->left=new_node();
-  p->left->left->flags=CONTENT;
-  p->left->left->left=new_node();
-  p->left->left->left->flags=IDENTIFIER;
-  p->left->left->left->identifier=add_identifier("this",4);
-  p->left->right=new_node();
-  p->left->right->flags=MEMBER;
-  p->left->right->identifier=add_identifier("_ZTV",4);
-  p->right=new_node();
-  p->right->flags=ADDRESS;
-  p->right->left=new_node();
-  p->right->left->flags=IDENTIFIER;
-  sl=&(*class->sl)[0];
-  vname=sl->styp->next->exact->mangled_identifier;
-  p->right->left->identifier=add_identifier(vname,strlen(vname));
-  if(!type_expression(p,0)){ierror(0);return;}
-  gen_IC(p,0,0);
-  if(p&&(p->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(p->o.reg);
-}
-np* ecpp_ctor_init_list(struct_declaration *ctor_func,int definit)
-/* parses a ctor-initializer */
-{
-  np *initlist; int bail=0;
-  char id[MAXI];
-  struct_list *sl;
-  struct_declaration *sd;
-  argument_list *al;
-  argument_list *base_args=0;
-  Var *v;
-  int i;
-  sd=ctor_func->higher_nesting;
-  if(!sd)ierror(0);
-  if(ctok->type!=T_COLON)definit=1;
-  if(!definit){
-    initlist=mymalloc(NODES*(sd->count));
-    memset(initlist,0,NODES*(sd->count));
-    next_token();killsp();
-    for(;;){
-      if(ctok->type!=NAME){error(76);bail=1;break;}
-      strncpy(id,ctok->name,MAXI);
-      next_token();killsp();
-      if(ctok->type!=LPAR){error(151);bail=1;break;}
-      al=argument_list_expression();
-      if(sd->base_class&&!strcmp(id,sd->base_class->identifier)){
-        base_args=al;
-      }else{
-        for(i=0;i<sd->count;++i){
-          if(!strcmp((*sd->sl)[i].identifier,id)) break;
-        }
-        if(i>=sd->count){error(23,ctok->name);bail=1;break;}
-        sl=&(*sd->sl)[i];
-        if(initlist[i]){error(344,id);bail=1;break;}
-        if(ISSCALAR(sl->styp->flags)||ISSTRUCT(sl->styp->flags)){
-          np dstruct;
-          dstruct=new_node();
-          dstruct->flags=DSTRUCT;
-          dstruct->left=new_node();
-          dstruct->left->flags=CONTENT;
-          dstruct->left->left=new_node();
-          dstruct->left->left->flags=IDENTIFIER;
-          dstruct->left->left->identifier=add_identifier("this",4);
-          dstruct->right=new_node();
-          dstruct->right->flags=MEMBER;
-          dstruct->right->identifier=add_identifier(id,strlen(id));
-          if(ISSCALAR(sl->styp->flags)){
-            initlist[i]=new_node();
-            initlist[i]->flags=ASSIGN;
-            initlist[i]->left=dstruct;
-            if(al&&al->next){error(345,id);bail=1;break;}
-            if(al){
-              initlist[i]->right=al->arg;
-            }else{
-              initlist[i]->right=new_node();
-              initlist[i]->right->flags=CEXPR;
-              initlist[i]->right->val.vmax=l2zm(0L);
-              initlist[i]->right->ntyp=new_typ();
-              initlist[i]->right->ntyp->flags=INT;
-            }
-          }else if(ecpp_is_member_struct(sl,sd)){
-            initlist[i]=new_node();
-            initlist[i]->flags=ADDRESS;
-            initlist[i]->left=dstruct;
-            initlist[i]->alist=al;
-          }
-        }
-      }
-    if(ctok->type==COMMA){next_token();killsp();}
-      else break;
-    }
-    if(bail){ecpp_free_init_list(initlist,sd); return 0;}
-  }
-  if(sd->base_class){
-    np p=new_node();
-    p->flags=IDENTIFIER;
-    p->identifier=add_identifier("this",4);
-    ecpp_call_ctor(sd->base_class,p,base_args);
-  }
-  if(sd->ecpp_flags&ECPP_VIRTUAL){
-    ecpp_gen_set_vtable(sd);
-  }
-  for(i=0;i<sd->count;++i){
-    if(!definit&&initlist[i]){
-      if(ISSCALAR((*sd->sl)[i].styp->flags)){
-        if(!type_expression(initlist[i],0)){ierror(0);return;}
-        gen_IC(initlist[i],0,0);
-        if(initlist[i]&&(initlist[i]->o.flags&(SCRATCH|REG))==(SCRATCH|REG)) free_reg(initlist[i]->o.reg);
-      }else if(ecpp_is_member_struct(&(*sd->sl)[i],sd)){
-        al=initlist[i]->alist;initlist[i]->alist=0;
-        ecpp_call_ctor((*sd->sl)[i].styp->exact,initlist[i],al);
-      }
-    }else if(ecpp_is_member_struct(&(*sd->sl)[i],sd)&&!((*sd->sl)[i].styp->exact->ecpp_flags&ECPP_POD)){
-      np p=new_node();
-      p->flags=ADDRESS;
-      p->left=new_node();
-      p->left->flags=IDENTIFIER;
-      p->left->identifier=add_identifier((*sd->sl)[i].identifier,strlen((*sd->sl)[i].identifier));
-      ecpp_call_ctor((*sd->sl)[i].styp->exact,p,0);
-    }
-  }
-}
-void ecpp_dtor_prolog()
-{
-  if(current_func->exact->higher_nesting->ecpp_flags&ECPP_VIRTUAL){
-    ecpp_gen_set_vtable(current_func->exact->higher_nesting);
-  }
-}
-void ecpp_dtor_epilog()
-{
-  struct_declaration *sd;
-  int i;
-  sd=current_func->exact->higher_nesting;
-  ecpp_auto_call_dtors();
-  for(i=sd->count-1;i>=0;--i){
-    if(ecpp_is_member_struct(&(*sd->sl)[i],sd)&&!((*sd->sl)[i].styp->exact->ecpp_flags&ECPP_POD)){
-      np p=new_node();
-      p->flags=ADDRESS;
-      p->left=new_node();
-      p->left->flags=IDENTIFIER;
-      p->left->identifier=add_identifier((*sd->sl)[i].identifier,strlen((*sd->sl)[i].identifier));
-      ecpp_call_dtor((*sd->sl)[i].styp->exact,p);
-   }
-  }
-  if(sd->base_class){
-    np p;
-    p=new_node();
-    p->flags=IDENTIFIER;
-    p->identifier=add_identifier("this",4);
-    ecpp_call_dtor(sd->base_class,p);
-  }
-}
-void ecpp_gen_default_ctor(struct_declaration *class)
-{
-  struct_list *sl;
-  Var *v;
-  type *t;
-  struct_declaration *sd;
-  char *mname;
-  if(!class){ierror(0);return;}
-  t=new_typ();
-  t->flags=FUNKT;
-  t->ecpp_flags=ECPP_CTOR;
-  t->next=new_typ();
-  t->next->flags=VOID;
-  sd=mymalloc(sizeof(struct_declaration));
-  t->exact=sd=add_sd(sd,FUNKT);
-  sd->ecpp_flags=ECPP_CTOR;
-  sd->higher_nesting=class;
-  sd->count=2;
-  sd->sl=mymalloc(2*sizeof(struct_list));
-  init_sl(&(*sd->sl)[0]);
-  (*sd->sl)[0].identifier=add_identifier("this",4);
-  (*sd->sl)[0].styp=new_typ();
-  (*sd->sl)[0].styp->flags=POINTER;
-  (*sd->sl)[0].styp->next=new_typ();
-  (*sd->sl)[0].styp->next->flags=STRUCT;
-  (*sd->sl)[0].styp->next->exact=class;
-  init_sl(&(*sd->sl)[1]);
-  (*sd->sl)[1].styp=new_typ();
-  (*sd->sl)[1].styp->flags=VOID;
-  sd->identifier=add_identifier("__ctor",6);
-  mname=ecpp_mangle_name(t,0,class);
-  sd->mangled_identifier=add_identifier(mname,strlen(mname));
-  init_sl(&(*class->sl)[class->count]);
-  (*class->sl)[class->count].identifier=add_identifier("__ctor",6);
-  (*class->sl)[class->count].mangled_identifier=add_identifier(mname,strlen(mname));
-  (*class->sl)[class->count].styp=clone_typ(t);
-  class->count++;
-  v=add_var(mname,t,EXTERN,0);
-  current_func=t;
-  enter_block();
-  first_ic=last_ic=0;ic_count=0;max_offset=l2zm(0L);
-  {
-    Var *tmp;
-    tmp=add_var((*sd->sl)[0].identifier,clone_typ((*sd->sl)[0].styp),AUTO|PARAMETER,0);
-    tmp->reg=(*t->exact->sl)[0].reg;
-    tmp->flags|=DEFINED;
-    tmp->dfilename=filename;
-    tmp->dline=line;
-  }
-  ecpp_ctor_init_list(sd,1);
-  if((c_flags[2]&USEDFLAG)&&ic1){fprintf(ic1,"function %s\n",v->identifier); pric(ic1,first_ic);}
-  vl1=first_var[0];
-  vl2=first_var[1];
-  vl3=merk_varf;
-  optimize(optflags,v);
-  if((c_flags[3]&USEDFLAG)&&ic2){fprintf(ic2,"function %s\n",v->identifier); pric(ic2,first_ic);}
-  if(out&&!only_inline&&!(c_flags[5]&USEDFLAG)){
-    memset(regs_modified,0,RSIZE);
-    gen_code(out,first_ic,v,max_offset);
-    static_stack_check(v);
-    v->flags|=GENERATED;
-  }
-  free_IC(first_ic);
-  first_ic=last_ic=0;
-  leave_block();
-  current_func=0;
-}
-void ecpp_gen_default_dtor(struct_declaration *class)
-{
-  struct_list *sl;
-  Var *v;
-  type *t;
-  struct_declaration *sd;
-  char *mname;
-  if(!class){ierror(0);return;}
-  t=new_typ();
-  t->flags=FUNKT;
-  t->ecpp_flags=ECPP_DTOR;
-  t->next=new_typ();
-  t->next->flags=VOID;
-  sd=mymalloc(sizeof(struct_declaration));
-  t->exact=sd=add_sd(sd,FUNKT);
-  sd->ecpp_flags=ECPP_DTOR;
-  sd->higher_nesting=class;
-  sd->count=2;
-  sd->sl=mymalloc(2*sizeof(struct_list));
-  init_sl(&(*sd->sl)[0]);
-  (*sd->sl)[0].identifier=add_identifier("this",4);
-  (*sd->sl)[0].styp=new_typ();
-  (*sd->sl)[0].styp->flags=POINTER;
-  (*sd->sl)[0].styp->next=new_typ();
-  (*sd->sl)[0].styp->next->flags=STRUCT;
-  (*sd->sl)[0].styp->next->exact=class;
-  init_sl(&(*sd->sl)[1]);
-  (*sd->sl)[1].styp=new_typ();
-  (*sd->sl)[1].styp->flags=VOID;
-  sd->identifier=add_identifier("__dtor",6);
-  mname=ecpp_mangle_name(t,0,class);
-  sd->mangled_identifier=add_identifier(mname,strlen(mname));
-  init_sl(&(*class->sl)[class->count]);
-  (*class->sl)[class->count].identifier=add_identifier("__dtor",6);
-  (*class->sl)[class->count].mangled_identifier=add_identifier(mname,strlen(mname));
-  (*class->sl)[class->count].styp=clone_typ(t);
-  class->count++;
-  v=add_var(mname,t,EXTERN,0);
-  current_func=t;
-  enter_block();
-  first_ic=last_ic=0;ic_count=0;max_offset=l2zm(0L);
-  {
-    Var *tmp;
-    tmp=add_var((*sd->sl)[0].identifier,clone_typ((*sd->sl)[0].styp),AUTO|PARAMETER,0);
-    tmp->reg=(*t->exact->sl)[0].reg;
-    tmp->flags|=DEFINED;
-    tmp->dfilename=filename;
-    tmp->dline=line;
-  }
-  ecpp_dtor_prolog();
-  ecpp_dtor_epilog();
-  if((c_flags[2]&USEDFLAG)&&ic1){fprintf(ic1,"function %s\n",v->identifier); pric(ic1,first_ic);}
-  vl1=first_var[0];
-  vl2=first_var[1];
-  vl3=merk_varf;
-  optimize(optflags,v);
-  if((c_flags[3]&USEDFLAG)&&ic2){fprintf(ic2,"function %s\n",v->identifier); pric(ic2,first_ic);}
-  if(out&&!only_inline&&!(c_flags[5]&USEDFLAG)){
-    memset(regs_modified,0,RSIZE);
-    gen_code(out,first_ic,v,max_offset);
-    static_stack_check(v);
-    v->flags|=GENERATED;
-  }
-  free_IC(first_ic);
-  first_ic=last_ic=0;
-  leave_block();
-  current_func=0;
-}
-void ecpp_access_specifier()
-{
-  while(ctok->type==NAME){
-    if(!strcmp("private",ctok->name)){ecpp_access=ECPP_PRIVATE;}
-    else if(!strcmp("protected",ctok->name)){ecpp_access=ECPP_PROTECTED;}
-    else if(!strcmp("public",ctok->name)){ecpp_access=ECPP_PUBLIC;}
-    else return;
-    next_token();
-    killsp();
-    if(ctok->type!=T_COLON){error(70);return;}
-    next_token();killsp();
-  }
-}
-void ecpp_add_friend(struct_declaration *class,struct_declaration *friend)
-{
-  static const int REALLOC_SIZE=4;
-  if(class->num_friends%REALLOC_SIZE==0){
-    int newsz=(class->num_friends/REALLOC_SIZE+1)*REALLOC_SIZE;
-    if(class->friends==0)class->friends=mymalloc(newsz*sizeof(struct_declaration**));
-    else class->friends=myrealloc(class->friends,newsz*sizeof(struct_declaration**));
-  }
-  class->friends[class->num_friends]=friend;
-  class->num_friends++;
-}
-int ecpp_is_friend(struct_declaration *class)
-/* returns 1, if current_func is a friend of class */
-{
-  int i;
-  for(i=0;i<class->num_friends;++i){
-    if(ISFUNC(class->friends[i]->typ)&&!strcmp(class->friends[i]->mangled_identifier,current_func->exact->mangled_identifier))return 1;
-    if(current_func->exact->higher_nesting&&class->friends[i]==current_func->exact->higher_nesting)return 1;
-  }
-  return 0;
-}
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif

@@ -1,4 +1,4 @@
-/*  $VER: vbcc (av.c) $Revision: 1.8 $    */
+/*  $VER: vbcc (av.c) $Revision: 1.9 $    */
 /*  aktive Variablen und Elimination unnoetiger Anweisungen */
 
 #include "opt.h"
@@ -454,7 +454,7 @@ int dead_assignments(flowgraph *fg)
 	  if(!BTST(isused,i)&&!is_volatile_ic(p)&&!(disable&1)){
 	    if(DEBUG&1024){printf("dead assignment deleted:\n");pric2(stdout,p);}
 	    if(*p->z.v->identifier&&p->code!=ASSIGN){ err_ic=p;error(170,i>=vcount-rcount?"*":"",p->z.v->identifier);err_ic=0;}
-	    if(p->code!=GETRETURN) changed=1;
+	    /*if(p->code!=GETRETURN)*/ changed=1;
 	    if(p==fg->start){remove_IC_fg(fg,p);break;}
 	    p=p->prev;remove_IC_fg(fg,p->next);
 	    continue;

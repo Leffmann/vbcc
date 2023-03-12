@@ -1,4 +1,4 @@
-/*  $VER: vbcc (cse.c) $Revision: 1.5 $    */
+/*  $VER: vbcc (cse.c) $Revision: 1.11 $    */
 /*  verfuegbare Ausdruecke und common subexpression elimination */
 
 #include "opt.h"
@@ -99,7 +99,6 @@ void available_expressions(flowgraph *fg)
     free(tmp);
 }
 
-
 int compare_objs(obj *o1,obj *o2,int t)
 /*  Vergleicht die beiden Objekte; liefert 0, wenn sie gleich sind, sonst   */
 /*  1 oder -1, um eine Ordnung darauf zu definieren                         */
@@ -136,7 +135,7 @@ int compare_exp(const void *a1,const void *a2)
     i1=p1->code; i2=p2->code;
     if(i1<i2) return -1;
     if(i1>i2) return 1;
-    i1=p1->typf; i2=p2->typf;
+    i1=p1->typf&(NU|VOLATILE|SIGNED_CHARACTER); i2=p2->typf&(NU|VOLATILE|SIGNED_CHARACTER);
     if(i1<i2) return -1;
     if(i1>i2) return 1;
     i1=compare_objs(&p1->q1,&p2->q1,q1typ(p1));
@@ -144,6 +143,7 @@ int compare_exp(const void *a1,const void *a2)
     i1=compare_objs(&p1->q2,&p2->q2,q2typ(p1));
     return i1;
 }
+
 void print_ae(bvtype *exp)
 {
     int i;
@@ -344,11 +344,13 @@ int cse(flowgraph *fg,int global)
         p=g->start;
         while(p){
             i=p->expindex;
-            if(i>=0&&!is_volatile_ic(p)){
+	    /* TODO: correctly handle KONST|DREFOBJ in change_list and enable KONST|DREFOBJ */
+            if(i>=0&&!is_volatile_ic(p)&&(p->q1.flags&(KONST|DREFOBJ))!=(KONST|DREFOBJ)&&(p->q2.flags&(KONST|DREFOBJ))!=(KONST|DREFOBJ)){
 	      if(!global||!BTST(done,i)){
 	        int t=ztyp(p);
                 if(i>=ecount) ierror(0);
-                if(BTST(ae,i)&&ISSCALAR(t)){
+		if(p->code==ASSIGN&&!zmeqto(p->q2.val.vmax,sizetab[t&NQ])) t=ARRAY; /* no memcpy ICs */
+                if(BTST(ae,i)&&ISSCALAR(t)&&!(elist[i]->flags&EFF_IC)){
                     if(DEBUG&1024){ printf("can eliminate common subexpression:\n");pric2(stdout,p);}
                     /*  Hilfsvariable erzeugen  */
                     new=new_typ();

@@ -103,7 +103,7 @@
 "assignment discards volatile",WARNING|ANSIV,                       /*  100 */
 "<<, >> and %% need integer operands",ERROR|ANSIV,
 "casting from void is not allowed",ERROR|ANSIV,
-"integer too large to fit into pointer",WARNING|ANSIV,
+"integer too large to fit into pointer",WARNING,
 "only integers can be cast to pointers",ERROR|ANSIV,
 "invalid cast",ERROR|ANSIV,                                         /*  105 */
 "pointer too large to fit into integer",WARNING|ANSIV,
@@ -224,7 +224,7 @@
 "'...' only allowed with prototypes",WARNING|ANSIV,
 "Hey, do you really know the priority of '&&' vs. '||'?",WARNING|DONTWARN,
 "be careful with priorities of <</>> vs. +/-",WARNING,
-"adress of auto variable returned",WARNING,
+"address of auto variable returned",WARNING,
 "void function returns a void expression",WARNING,                  /*  225 */
 "redeclaration of typedef <%s>",WARNING|ANSIV,
 "multiple specification of attribute \"%s\"",WARNING,
@@ -366,3 +366,7 @@
 "constant implicitly truncated",WARNING,
 "hexadecimal escape sequence overflow",WARNING,
 "missing identifier",ERROR|FATAL|ANSIV,                            /* 365 */
+"negative shift count is undefined",WARNING,
+"shift count too large for data type",WARNING,
+"redeclaration of function argument with different register",WARNING,
+"declaration expected",WARNING|ANSIV,

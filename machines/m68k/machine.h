@@ -1,4 +1,4 @@
-/*  $VER: vbcc (m68k/machine.h) $Revision: 1.9 $     */
+/*  $VER: vbcc (m68k/machine.h) $Revision: 1.13 $     */
 
 #include "dt.h"
 
@@ -15,7 +15,7 @@ typedef struct AddressingMode{
 #define MAXR 28
 
 /*  Number of commandline-options the code-generator accepts.       */
-#define MAXGF 30
+#define MAXGF 35
 
 /*  If this is set to zero vbcc will not generate ICs where the     */
 /*  target operand is the same as the 2nd source operand.           */
@@ -109,4 +109,10 @@ struct reg_handle {
 #define HAVE_TARGET_PRAGMAS
 
 /* We have a target-specific add_var hook */
-#define HAVE_TARGET_VARHOOK
+#define HAVE_TARGET_VARHOOK_PRE
+
+#define HAVE_POF2OPT 1
+
+#ifndef M68K_16BIT_INT
+#define HAVE_INT_SIZET 1
+#endif

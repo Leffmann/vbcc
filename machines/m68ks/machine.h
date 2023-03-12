@@ -8,5 +8,7 @@
 
 #define PTRDIFF_T(x) LONG
 
+#define BESTCOPYT LONG
+
 #include "dt.h"
 #include "../m68k/machine.h"

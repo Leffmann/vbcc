@@ -241,6 +241,9 @@ This backend provides the following additional options:
 @table @code
         @item __PPC__
         
+        @item __AMIGADATE__
+                This is set to current date as @code{"(DD.MM.YYYY)"},
+                useful with version strings.
 @end table
 
 @section Stack

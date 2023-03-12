@@ -1,4 +1,4 @@
-/*  $VER: vbcc (alias.c) $Revision: 1.4 $  */
+/*  $VER: vbcc (alias.c) $Revision: 1.6 $  */
 /*  Listen benutzter/veraenderter Variablen und Behandlung von Decknamen.   */
 
 #include "opt.h"
@@ -79,7 +79,7 @@ void copy_pt(bvtype **pt,int to,int from)
       for(i=0;i<vcount;i++){
 	if(BTST(pt[from-(vcount-rcount)],i)){
 	  Var *v=vilist[i];
-	  if(!is_const(v->vtyp)||!v->clist)
+	  if(!is_const(v->vtyp)||!v->clist||(v->storage_class!=STATIC&&v->storage_class!=EXTERN))
 	    break;
 	}
       }
@@ -201,7 +201,7 @@ void dref_pt(bvtype **pt,int i)
   for(j=0;j<vcount;j++){
     if(BTST(pt[i],j)){
       Var *v=vilist[j];
-      if(v->clist&&is_const(v->vtyp)){
+      if(v->clist&&is_const(v->vtyp)&&(v->storage_class==STATIC||v->storage_class==EXTERN)){
 	add_clist_refs(pt[d],v->vtyp,v->clist);
       }else if(!pt[j]){
 	undef_pt(pt,d);
@@ -749,7 +749,8 @@ void create_alias(flowgraph *fg)
 		    cnt++;
 		  }
 		}
-		if(cnt==1){
+		if(cnt==1&&all_preds){
+		  if(DEBUG&1024) {printf("replacing indirect call by single target:\n");pric2(stdout,p);}
 		  p->q1.flags=VAR;
 		  p->q1.val.vmax=l2zm(0L);
 		  p->q1.v=p->call_list[0].v;

@@ -1,4 +1,4 @@
-/*  $VER: vbcc (cp.c) $Revision: 1.4 $     */
+/*  $VER: vbcc (cp.c) $Revision: 1.5 $     */
 /*  verfuegbare Kopien und copy propagation */
 
 #include "opt.h"
@@ -233,6 +233,7 @@ int cprop(obj *o,int target,zmax size)
 	 &&p->q1.v!=o->v&&zmeqto(p->z.val.vmax,o->val.vmax)
 	 &&(ISSCALAR(o->v->vtyp->flags)||(p->typf&NQ)==(o->v->vtyp->flags&NQ))
 	 &&!must_convert(p->typf,o->v->vtyp->flags,0)
+	 &&!is_volatile_ic(p)
 	 ){
 	if(((o->flags&DREFOBJ)&&!(p->q1.flags&DREFOBJ))||!(p->q1.flags&DREFOBJ)&&(!static_cse||!((p->q1.flags&(VAR|VARADR))==VAR)||(p->q1.v->storage_class!=EXTERN&&p->q1.v->storage_class!=STATIC))){
 	  int mdtyp;

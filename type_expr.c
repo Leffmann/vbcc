@@ -1,4 +1,4 @@
-/*  $VER: vbcc (type_expr.c) $Revision: 1.43 $   */
+/*  $VER: vbcc (type_expr.c) $Revision: 1.58 $   */
 
 #include "vbc.h"
 
@@ -15,336 +15,336 @@ int dontopt;
 int no_cast_free;
 
 #ifdef HAVE_ECPP
-typedef struct ecpp_overload_candidate {
-  Var *v;
-  int *ranks;
-  int worse;
-  int ellipsis;
-} ecpp_overload_candidate;
-np ecpp_clone_tree(np p);
-int ecpp_transform_call(np p, np this);
-int ecpp_rank_arg_type(type *arg,type *t);
-Var *ecpp_find_best_overloaded_func(ecpp_overload_candidate* cands,int numcands,int numargs,int *ambigp);
-Var *ecpp_find_overloaded_func(Var *startv,struct_declaration *this,argument_list *al);
-int ecpp_check_access(type *t,struct_declaration *sd,struct_declaration *this);
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
 #ifdef HAVE_MISRA
-
-int misra_test_underlying_type2(np tree);
-
-int misra_identifier_utype(np tree) {
-  /* TODO: Underlying type von Identifier feststellen und zurückgeben */
-	return tree->ntyp->flags;
-}
-
-int misra_const_expression_utype(np tree) {
-  /* TODO: Underlying type von Identifier feststellen und zurückgeben */
-	if (ISINT(tree->ntyp->flags)) {
-		if ((tree->ntyp->flags&NQ) > INT) return tree->ntyp->flags;
-		eval_constn(tree);
-		if (tree->ntyp->flags&UNSIGNED) {
-			if (zumleq(vumax,t_max(UNSIGNED|CHAR))) return (UNSIGNED|CHAR);
-			else if (zumleq(vumax,t_max(UNSIGNED|SHORT))) return (UNSIGNED|SHORT);
-			else if (zumleq(vumax,t_max(UNSIGNED|INT))) return (UNSIGNED|INT);
-			else if (zumleq(vumax,t_max(UNSIGNED|LONG))) return (UNSIGNED|LONG);
-			else if (zumleq(vumax,t_max(UNSIGNED|LLONG))) return (UNSIGNED|LLONG);
-		} else {
-			if ( (zmleq(t_min(CHAR),vmax)) && (zmleq(vmax,t_max(CHAR)))) return (CHAR);
-			else if ( (zmleq(t_min(SHORT),vmax)) && (zmleq(vmax,t_max(SHORT)))) return (SHORT);
-			else if ( (zmleq(t_min(INT),vmax)) && (zmleq(vmax,t_max(INT)))) return (INT);
-			else if ( (zmleq(t_min(LONG),vmax)) && (zmleq(vmax,t_max(LONG)))) return (LONG);
-			else if ( (zmleq(t_min(LLONG),vmax)) && (zmleq(vmax,t_max(LLONG)))) return (LLONG);
-		}
-	}
-	return tree->ntyp->flags;
-}
-
-int misra_string_utype(np tree) {
-  /* TODO: Underlying type von Identifier feststellen und zurückgeben */
-	return tree->ntyp->flags;
-}
-
-
-int misra_int_is_wider_ss(int from, int to) {
-	if ((!ISINT(from)) || (!ISINT(to))) return 0;
-	if ((from&UNSIGNED) != (to&UNSIGNED)) return 0;
-	if ((to&NQ) <= (from&NQ)) return 0;
-	return 1;
-}
-
-int misra_float_is_wider(int from, int to) {
-	if ((!ISFLOAT(from)) || (!ISFLOAT(to))) return 0;
-	if ((to&NQ) <= (from&NQ)) return 0;
-	return 1;
-}
-
-
-int misra_is_complex(np tree) {
-	switch ( tree->flags ) {
-		case IDENTIFIER:
-		case CEXPR:
-		case STRING:
-		case DSTRUCT:
-		case CONTENT:
-		case CALL:
-
-			return 0;
-			break;
-		case POSTDEC:
-		case POSTINC:
-		case PREINC:
-		case PREDEC:
-		case MULT:
-		case DIV:
-		case MOD:
-		case ADD:
-		case SUB:
-		case LSHIFT:	
-		case RSHIFT:
-		case LESS:			
-		case GREATER:
-		case LESSEQ:
-		case GREATEREQ:
-		case INEQUAL:
-		case EQUAL:
-		case LAND:
-		case LOR:
-		case AND:		
-		case XOR:
-		case OR:
-		case KOMPLEMENT:
-		case NEGATION:
-		case ASSIGN:
-		case ASSIGNOP: 
-		case MINUS:
-		case ADDRESS:
-		case KOMMA:
-		case COND:
-		case COLON:
-		case CAST:
-		default:
-			return 1;
-			break;
-	}
-	return 0;
-}
-
-
-int misra_test_underlying_type(np tree) {
-	return misra_test_underlying_type2(tree);
-}
-
-
-int misra_test_underlying_type2(np tree) {
-	int left_type;
-	int right_type;
-	int ret_type;
-  left_type = 0;
-	right_type = 0;
-	ret_type = 0;
-	if (tree->left) left_type = misra_test_underlying_type2(tree->left);
-	if (tree->right) right_type = misra_test_underlying_type2(tree->right);
-	switch ( tree->flags ) {
-		case IDENTIFIER:
-			return misra_identifier_utype(tree);
-			break;
-		case CEXPR:
-			return misra_const_expression_utype(tree);
-			break;
-		case STRING:
-			return misra_string_utype(tree);
-			break;
-		case POSTDEC:
-		case POSTINC:
-		case PREINC:
-		case PREDEC:
-			return left_type;
-			break;
-		case MULT:
-		case DIV:
-		case MOD:
-		case AND:				
-		case XOR:
-		case OR:
-		case ADD:
-		case SUB:
-			/* als erstes ergebniss-typ berechnen */
-			if (ISINT(tree->ntyp->flags)) {
-				if (((left_type&NQ) < INT) || ((right_type&NQ) < INT)) {
-					/* We have integral promotion */
-					if ((left_type&NQ) > (right_type&NQ)) {
-						/* Left operand is the winner */
-						ret_type = left_type;
-					} else if ((right_type&NQ) > (left_type&NQ)) {
-						/* Right operand wins */
-						ret_type = right_type;
-					} else if ((left_type&UNSIGNED) == (right_type&UNSIGNED)) {
-						/* beide exakt gleich */
-						ret_type = right_type;						
-					} else if (left_type&UNSIGNED) {
-						/* links gewinnt weil unsigned */
-						ret_type = left_type;						
-					} else {
-						/* dito mit rechts */
-						ret_type = right_type;						
-					}
-				} else {
-					ret_type = tree->ntyp->flags;
-				}
-			} else {
-				ret_type = tree->ntyp->flags;
-			}
-			/* TODO: bool check */
-			if (ISINT(tree->ntyp->flags)) {
-				if ((left_type&UNSIGNED) != (right_type&UNSIGNED)) {
-					/* Different signedness */
-					misra_neu(43,10,1,0);
-				}
-				if ((left_type&NQ) != (ret_type&NQ)) {
-					if (misra_is_complex(tree->left)) misra_neu(43,10,1,0);	
-				} else if ((right_type&NQ) != (ret_type&NQ)) {
-					if (misra_is_complex(tree->right)) misra_neu(43,10,1,0);
-				}
-			} else if (ISFLOAT(tree->ntyp->flags)) {
-				if (ISINT(left_type) || ISINT(right_type)) misra_neu(43,10,1,0);
-				if ((left_type&NQ) != (ret_type&NQ)) {
-					if (misra_is_complex(tree->left)) misra_neu(77,10,2,0);
-				} else if ((right_type&NQ) != (ret_type&NQ)) {
-					if (misra_is_complex(tree->right)) misra_neu(43,10,1,0);
-				}
-			} else {
-				
-			}	
-			return ret_type;
-			break;
-		case LSHIFT:			
-		case RSHIFT:
-			return left_type;
-			break;
-		case LESS:			/* Bool expressions always have bool type */
-		case GREATER:
-		case LESSEQ:
-		case GREATEREQ:
-		case INEQUAL:
-		case EQUAL:
-		case LAND:
-		case LOR:
-				return (tree->ntyp->flags|BOOLEAN);
-			break;
-		case KOMPLEMENT:
-		case NEGATION:
-			return left_type;
-			break;
-		case ASSIGN:
-		case ASSIGNOP:   /* muß noch anders werden damit sauber */
-			ret_type = left_type;
-			if ( (right_type&NU) != (ret_type&NU) ) {
-				if (ISINT(ret_type)) {
-					if (ISINT(right_type)) {
-						if ((ret_type&UNSIGNED) != (right_type&UNSIGNED)) {				
-							misra_neu(43,10,1,0);
-						} else if ((right_type&NQ) > (ret_type&NQ)) {
-							misra_neu(43,10,1,0);	
-						} else {
-							if (misra_is_complex(tree->right)) misra_neu(43,10,1,0);
-						}
-					} else {
-						misra_neu(77,10,2,0);
-					}
-				} else if (ISSCALAR(ret_type)) {
-					if	(ISINT(right_type)) {
-						misra_neu(43,10,1,0);	
-					} else if (ISSCALAR(right_type)) {
-						if ((right_type&NQ) > (ret_type&NQ))  {
-							misra_neu(77,10,2,0);
-						} else {
-							if (misra_is_complex(tree->right)) misra_neu(77,10,2,0);
-						}
-					}
-				} else {
-					/* POINTER MAL MACHEN */
-				}
-			}
-			return left_type;
-			break;
-		case CALL:
-			{
-				int argcount = 0;
-				ret_type = tree->ntyp->flags;
-				{
-					type * function;
-					argument_list *arguments = tree->alist;
-					function = tree->left->ntyp->next;
-					if (!function) { 
-						/* Mal nen fehler ausgeben */
-					}
-					while(arguments) {
-						argcount++;
-						if (argcount >= function->exact->count) {
-							misra_neu(78,16,6,0);
-							break;
-						}
-						{
-							int arg_type;
-							type * argtyp_func = (*function->exact->sl)[argcount-1].styp;
-							arg_type = misra_test_underlying_type(arguments->arg);
-							/* checken ob typen compatibel */
-							
-							if ((arg_type&NU) != (argtyp_func->flags&NU)) {
-								if (ISINT(arg_type)) {
-									if (!misra_int_is_wider_ss(arg_type,argtyp_func->flags)) {
-										misra_neu(43,10,1,0);
-									} else if (misra_is_complex(arguments->arg)) {
-										misra_neu(43,10,1,0);
-									} else if (arguments->arg->flags != CEXPR) {
-										misra_neu(43,10,1,0);
-									}
-								} else if (ISFLOAT(arg_type)) {
-										misra_neu(77,10,2,0);
-								}
-							}
-
-							arguments = arguments->next;
-						}
-						if (argcount+1 != function->exact->count) {
-							misra_neu(78,16,6,0);
-						}
-					}
-				}
-				return ret_type;
-			}
-			break;
-		case CAST:
-			if (ISINT(left_type)) {
-				if (misra_int_is_wider_ss(tree->ntyp->flags,left_type)) {
-					return tree->ntyp->flags;
-				}
-				misra_neu(0,10,3,0);
-			} else if (ISFLOAT(left_type)) {
-				if (misra_float_is_wider(tree->ntyp->flags,left_type)) {
-					return tree->ntyp->flags;
-				}
-				misra_neu(48,10,4,0);
-			}
-			return tree->ntyp->flags;
-			break;
-		case DSTRUCT:
-		case CONTENT:
-		case MINUS:
-		case ADDRESS:
-		case KOMMA:
-		case COND:
-		case COLON:
-		default:
-			ret_type = tree->ntyp->flags;
-			return ret_type;
-	}
-	return 0;
-}
-
-
-
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 
 
@@ -427,37 +427,37 @@ static np aos4_clone_tree(np p)
 }
 #endif
 #ifdef HAVE_MISRA
-static int misra_exp_check(np p, int boolop)
-{
-	int left_bool=0, right_bool=0, here_bool=0; 
-	if (	((p->flags >= COND) && (p->flags <= LAND))    ||		/* COND, LOR, LAND */
-			((p->flags >= EQUAL) && (p->flags <=GREATEREQ)) ||		/* EQUAL, INEQUAL, LESS, LESSEQ, GREATER, GREATEREQ */
-			(p->flags == NEGATION)	) {								/* NEGATION */
-		boolop = 1;
-	}
-	if (	((p->flags >= LOR) && (p->flags <= LAND)) ||
-			((p->flags >= EQUAL) && (p->flags <=GREATEREQ)) ||		/* EQUAL, INEQUAL, LESS, LESSEQ, GREATER, GREATEREQ */
-			(p->flags == NEGATION)	) {								/* NEGATION */
-		here_bool = 1;
-	}
-
-	if(p->left) 		left_bool = misra_exp_check(p->left,boolop);
-	if(p->right)		right_bool = misra_exp_check(p->right,boolop);
-	if (  (p->flags==LOR) || (p->flags==LAND) || (p->flags==NEGATION) ) {
-		if (!( (left_bool)&&(right_bool) )) misra_neu(36,12,6,0);
-	} else {
-		if (left_bool || right_bool) misra_neu(36,12,6,0);
-	}
-	if (boolop && ((p->flags==ASSIGN)||(p->flags==ASSIGNOP))) misra_neu(35,13,1,0);
-
-	return here_bool;
-}
-
-static void misra_check_crement(np p, int first) {
-	if (((p->flags>=PREINC)&&(p->flags<=POSTDEC)) && (!first) ) misra_neu(0,12,13,0);
-	if (p->left) misra_check_crement(p->left,0);
-	if (p->right) misra_check_crement(p->right,0);
-}
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
 int type_expression(np p,type *ttyp)
 /*  Art Frontend fuer type_expression2(). Setzt dontopt auf 0   */
@@ -465,17 +465,56 @@ int type_expression(np p,type *ttyp)
 		int ret_val;
     dontopt=0;
 #ifdef HAVE_MISRA
-	if(misracheck) {
-		misra_exp_check(p,0);
-		misra_check_crement(p,1);
-	}
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
    ret_val = type_expression2(p,ttyp);
 #ifdef HAVE_MISRA
-	if (ret_val) misra_test_underlying_type(p);
+/* removed */
 #endif
 		return ret_val;
 
+}
+
+static void fix_addr_ptype(np op)
+{
+  np p=op;
+  while(p->flags==FIRSTELEMENT) p=p->left;
+  if(p->left->flags==CONTENT){
+    int pt=p->left->left->ntyp->flags;
+    if(!ISPOINTER(pt)) ierror(0);
+    if(!ISPOINTER(op->ntyp->flags)) ierror(0);
+    op->ntyp->flags=pt;
+  }
+}
+
+static int ptype(np op)
+{
+#ifdef POINTER_VARADR
+  Var *v=0;
+  np p=op;
+
+  while(p->flags==FIRSTELEMENT/*||p->flags==CONTENT*/) p=p->left;
+  
+  if(p->flags==IDENTIFIER)
+    v=find_var(p->identifier,0);
+  if(v) 
+    return POINTER_VARADR(v);
+  else
+    return POINTER_TYPE(op->ntyp);
+#else
+  return POINTER_TYPE(op->ntyp);
+#endif
+}
+
+static int nullpointer(np p)
+{
+  if(p->flags!=CEXPR) return 0;
+  eval_constn(p); /* TODO: do we need to use other measure to verify null pointer? */
+  if(zmeqto(Z0,vmax)) return 1;
+  return 0;
 }
 
 int type_expression2(np p,type *ttyp)
@@ -492,10 +531,10 @@ int type_expression2(np p,type *ttyp)
   np thisp=0;
 #endif
 #ifdef HAVE_ECPP
-  np thisp_ecpp;
-  static np ecpp_this=0;
-  static argument_list *ecpp_al=0;
-  argument_list *ecpp_merk_al;
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   if(!p){ierror(0);return(1);}
   if(ttyp) ttf=ttyp->flags&NQ;
@@ -507,14 +546,14 @@ int type_expression2(np p,type *ttyp)
     /*  implizite Deklaration bei Aufruf einer Funktion     */
     struct_declaration *sd;type *t;Var *v;
 #ifdef HAVE_MISRA
-    misra_neu(20,0,0,0,p->left->identifier);
+/* removed */
 #endif
     error(161,p->left->identifier);
     if(v=find_ext_var(p->left->identifier)){
       if(!ISFUNC(v->vtyp->flags)||v->vtyp->next->flags!=INT){
 	error(68,p->left->identifier);
 #ifdef HAVE_MISRA
-	misra_neu(26,8,4,0,p->left->identifier);
+/* removed */
 #endif
       }
       v->flags&=~NOTINTU;
@@ -621,7 +660,7 @@ int type_expression2(np p,type *ttyp)
 /*    printf("bearbeite %s\n",ename[p->flags]);*/
 /*  Erzeugung von Zeigern aus Arrays                            */
 /*  Hier muss noch einiges genauer werden (wie gehoert das?)    */
-  if(p->left&&(ISARRAY(p->left->ntyp->flags)||ISFUNC(p->left->ntyp->flags))){
+  if(p->left&&f!=PCEXPR&&(ISARRAY(p->left->ntyp->flags)||ISFUNC(p->left->ntyp->flags))){
     if(f!=ADDRESS&&f!=ADDRESSA&&f!=ADDRESSS&&f!=FIRSTELEMENT&&f!=DSTRUCT&&(f<PREINC||f>POSTDEC)&&(f<ASSIGN||f>ASSIGNOP)){
       np new=new_node();
       if((p->left->ntyp->flags&NQ)==ARRAY) new->flags=ADDRESSA;
@@ -633,7 +672,7 @@ int type_expression2(np p,type *ttyp)
       ok&=type_expression2(p->left,0);
     }
   }
-  if(p->right&&f!=FIRSTELEMENT&&f!=DSTRUCT&&f!=ADDRESSS&&(ISARRAY(p->right->ntyp->flags)||ISFUNC(p->right->ntyp->flags))){
+  if(p->right&&f!=PCEXPR&&f!=FIRSTELEMENT&&f!=DSTRUCT&&f!=ADDRESSS&&p->right->ntyp&&(ISARRAY(p->right->ntyp->flags)||ISFUNC(p->right->ntyp->flags))){
     np new=new_node();
     if(ISARRAY(p->right->ntyp->flags)) new->flags=ADDRESSA;
     else new->flags=ADDRESS;
@@ -647,79 +686,79 @@ int type_expression2(np p,type *ttyp)
   if(f==IDENTIFIER||f==(IDENTIFIER|CONSTADDR)){
     int ff;Var *v;
 #ifdef HAVE_ECPP
-    if(ecpp){
-      if(p->identifier==empty&&p->dsize==0&&p->o.v) {
-        /* for the temp var of a virtual function call */
-        p->lvalue=1; p->ntyp=clone_typ(p->o.v->vtyp);
-        return 1;
-      }
-      if(p->o.v){
-        v=p->o.v;
-        if(p->ntyp){freetyp(p->ntyp);p->ntyp=0;}
-      }else{
-        if(p->identifier==empty){
-          /* variable sizeof-expression */
-          v=p->dsize;
-        }else{
-          struct_declaration *sd=0;
-          struct_list *sl=0;
-          char* id=0;
-          v=ecpp_find_var(p->identifier);
-          if(!v){
-            sd=ecpp_find_scope(p->identifier,&id);
-            if(!id||!*id){ierror(0);return 0;} /* means: it's a type FIXME: maybe create object here */
-            if(!sd&&current_func&&current_func->exact->higher_nesting){
-              /* not-nested-name */
-              sl=ecpp_find_member(id,current_func->exact->higher_nesting,&sd,1);
-              if(sl)sd=current_func->exact->higher_nesting;
-            }
-            if(sd&&!sl){
-              sl=ecpp_find_member(id,sd,&sd,2);
-              if(current_func&&current_func->exact->higher_nesting)sd=current_func->exact->higher_nesting;
-            }
-            if(sl){
-              if(ISFUNC(sl->styp->flags)){
-                /* method */
-                v=find_ext_var(sl->mangled_identifier);
-                v=ecpp_find_overloaded_func(v,sd,ecpp_al);
-                if(!v){return 0;}
-              }else if(sl->styp->ecpp_flags&ECPP_STATIC){
-                /* static data member */
-                v=ecpp_find_ext_var(sl->mangled_identifier);
-                /* FIXME: check access */
-              }else{
-                /* non-static data member */
-                if(current_func&&current_func->exact->higher_nesting&&!(sl->styp->ecpp_flags&ECPP_STATIC)){
-                  struct_declaration *sd2=current_func->exact->higher_nesting;
-                  while(sd2&&sd2!=sd)sd2=sd2->base_class;
-                  if(sd2==sd){
-                    memset(p,0,NODES);
-                    p->flags=DSTRUCT;
-                    p->right=new_node();
-                    p->right->flags=MEMBER;
-                    p->right->identifier=sl->identifier;
-                    p->left=new_node();
-                    p->left->flags=CONTENT;
-                    p->left->left=new_node();
-                    p->left->left->flags=IDENTIFIER;
-                    p->left->left->identifier="this";
-                    return type_expression2(p,0);
-                  }
-                }
-              }
-            }
-          }
-          if(!v&&!strcmp(p->identifier,"__ctor")||!strcmp(p->identifier,"__dtor")){ierror(0);return 0;}
-          if(!v){
-            v=ecpp_find_ext_var(p->identifier);
-            if(v&&ISFUNC(v->vtyp->flags)){
-              v=ecpp_find_overloaded_func(v,0,ecpp_al);
-              if(!v)return 0;
-            }
-          }
-        }
-      }
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(!ecpp){
     if(p->identifier==empty)
@@ -806,7 +845,7 @@ int type_expression2(np p,type *ttyp)
     }
     if(f==LAND) m=1; else m=0;
 #ifdef HAVE_MISRA
-    if(p->right->sidefx) misra_neu(33,12,4,0);
+/* removed */
 #endif
     p->ntyp=new_typ();
     p->ntyp->flags=INT;
@@ -851,8 +890,8 @@ int type_expression2(np p,type *ttyp)
     if(!ISINT(p->left->ntyp->flags)){error(90);return 0;}
     if(!ISINT(p->right->ntyp->flags)){error(90);return 0;}
 #ifdef HAVE_MISRA
-    if(!(p->left->ntyp->flags&UNSIGNED)) misra_neu(37,12,7,0);
-    if(!(p->right->ntyp->flags&UNSIGNED)) misra_neu(37,12,7,0);
+/* removed */
+/* removed */
 #endif
     if(ttyp&&(ttf<=INT||ttf<(p->left->ntyp->flags&NQ)||ttf<(p->right->ntyp->flags&NQ))&&shortcut(f,ttyp->flags&NU)&&(!must_convert(p->left->ntyp->flags,ttyp->flags,0)||!must_convert(p->right->ntyp->flags,ttyp->flags,0)))
       p->ntyp=clone_typ(ttyp);
@@ -890,10 +929,10 @@ int type_expression2(np p,type *ttyp)
       return ok;
     }
 #ifdef HAVE_MISRA
-    if(misracheck&&(f==EQUAL||f==INEQUAL)){
-      if(ISFLOAT(p->left->ntyp->flags)||ISFLOAT(p->right->ntyp->flags))
-	misra_neu(50,13,3,0);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(!ISARITH(p->left->ntyp->flags)||!ISARITH(p->right->ntyp->flags)){
       if(!ISPOINTER(p->left->ntyp->flags)||!ISPOINTER(p->right->ntyp->flags)){
@@ -1048,8 +1087,8 @@ int type_expression2(np p,type *ttyp)
 #endif
       if(f!=ADD&&f!=SUB){error(94);return 0;}
 #ifdef HAVE_MISRA
-      if(misracheck&&(ISPOINTER(p->left->ntyp->flags)||ISPOINTER(p->right->ntyp->flags)))
-	misra(101);
+/* removed */
+/* removed */
 #endif
       if(ISPOINTER(p->left->ntyp->flags)){
 	if((p->left->ntyp->next->flags&NQ)==VOID)
@@ -1176,15 +1215,20 @@ int type_expression2(np p,type *ttyp)
 	  p->ntyp->flags&=~NQ;
 	  p->ntyp->flags|=int_erw(p->left->ntyp->flags);
 	}
-#ifdef HAVE_MISRA
-	if(misracheck){
-		if(!(p->left->ntyp->flags&UNSIGNED)) misra_neu(37,12,7,0);
-	  if(p->right->flags==CEXPR){
-	    eval_constn(p->right);
-	    if(!zmleq(l2zm(0L),vmax)) misra_neu(38,12,8,0);
-	    if(zmleq(zmmult(sizetab[p->left->ntyp->flags&NQ],char_bit),vmax)) misra_neu(38,12,8,0);
-	  }
+	if(p->right->flags==CEXPR){
+	  eval_constn(p->right);
+	  if(!zmleq(l2zm(0L),vmax)) error(366);
+	  if(zmleq(zmmult(sizetab[p->ntyp->flags&NQ],char_bit),vmax)&&zmleq(zmmult(sizetab[p->left->ntyp->flags&NQ],char_bit),vmax)) error(367);
 	}
+#ifdef HAVE_MISRA
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
       }else{
 	/* ggfs. in kleinerem Zieltyp auswerten - bei float keinen shortcut (wäre evtl. double=>float unkritisch?) */
@@ -1240,7 +1284,7 @@ int type_expression2(np p,type *ttyp)
   if(f==CAST){
     int from=(p->left->ntyp->flags),to=(p->ntyp->flags);
 #ifdef HAVE_MISRA
-    if(from==to) misra_neu(44,0,0,0);
+/* removed */
 #endif
     from&=NQ;to&=NQ;
     if(to==VOID) return ok;
@@ -1251,7 +1295,7 @@ int type_expression2(np p,type *ttyp)
       if(ISPOINTER(to)){
 	if(ISINT(from)){
 #ifdef HAVE_MISRA
-	  misra(45);
+/* removed */
 #endif
 	  if(!zmleq(sizetab[from],sizetab[to])){
 	    error(103);
@@ -1264,7 +1308,7 @@ int type_expression2(np p,type *ttyp)
 	  {error(105);return 0;}
 	if(ISINT(to)){
 #ifdef HAVE_MISRA
-	  misra(45);
+/* removed */
 #endif
 	  if(!zmleq(sizetab[from],sizetab[to])){
 	    error(106);
@@ -1291,34 +1335,34 @@ int type_expression2(np p,type *ttyp)
       }
     }
 #ifdef HAVE_ECPP
-    if(ecpp&&ISPOINTER(from)&&ISPOINTER(to)&&
-        ISSTRUCT(p->left->ntyp->next->flags)&&ISSTRUCT(p->ntyp->next->flags)&&
-        (p->left->ntyp->next->exact->ecpp_flags&ECPP_VIRTUAL)!=(p->ntyp->next->exact->ecpp_flags&ECPP_VIRTUAL)){
-      int doinc=!(p->ntyp->next->exact->ecpp_flags&ECPP_VIRTUAL);
-      zmax amount; zmax align;
-      int i;
-      struct_declaration *virt;
-      np add;
-      if(doinc) virt=p->left->ntyp->next->exact;
-      else virt=p->ntyp->next->exact;
-      amount=szof((*virt->sl)[0].styp);
-      for(i=1;i<virt->count;++i)
-        if(!ISFUNC((*virt->sl)[i].styp->flags))break;
-      align=(*virt->sl)[i].align;
-
-      add=new_node();
-      if(doinc)add->flags=ADD;
-      else add->flags=SUB;
-      add->left=p->left;
-      add->ntyp=clone_typ(p->left->ntyp);
-      add->right=new_node();
-      add->right->flags=CEXPR;
-      add->right->val.vlong=zm2zl(amount);
-      add->right->val.vlong=zm2zl(zmmult(zmdiv(zmadd(amount,zmsub(align,l2zm(1L))),align),align));
-      add->right->ntyp=new_typ();
-      add->right->ntyp->flags=LONG;
-      p->left=add;
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     return ok;
   }
@@ -1343,8 +1387,8 @@ int type_expression2(np p,type *ttyp)
       }
     }
 #ifdef HAVE_MISRA
-    if(f==KOMPLEMENT&&!(p->left->ntyp->flags&UNSIGNED)) misra_neu(37,12,7,0);
-	if(f==MINUS&&(p->left->ntyp->flags&UNSIGNED)) misra_neu(39,12,9,0);
+/* removed */
+/* removed */
 #endif
     if(f==KOMPLEMENT&&!ISINT(p->left->ntyp->flags))
       {error(109);return 0;}
@@ -1354,8 +1398,15 @@ int type_expression2(np p,type *ttyp)
     }else{
       if(!p->left->ntyp) ierror(0);
       p->ntyp=clone_typ(p->left->ntyp);
-      if(ISINT(p->ntyp->flags)&&(!ttyp||!shortcut(f,ttyp->flags&NU)))
-	p->ntyp->flags=int_erw(p->ntyp->flags);
+      if(ISINT(p->ntyp->flags)){
+	if(!ttyp||!shortcut(f,ttyp->flags&NU)){
+	  p->ntyp->flags=int_erw(p->ntyp->flags);
+	}else{ 
+	  if((f==MINUS&&!zmleq(sizetab[ttyp->flags&NQ],sizetab[p->ntyp->flags&NQ]))||
+	     (f==KOMPLEMENT&&!zmleq(sizetab[ttyp->flags&NQ],sizetab[p->ntyp->flags&NQ])&&(p->ntyp->flags&UNSIGNED)))
+	    p->ntyp->flags=int_erw(p->ntyp->flags);
+	}
+      }
     }
     if(p->left->flags==CEXPR){
       eval_constn(p->left);
@@ -1455,66 +1506,69 @@ int type_expression2(np p,type *ttyp)
       }
     }
     p->ntyp=new_typ();
-    p->ntyp->flags=POINTER_TYPE(p->left->ntyp);
+    p->ntyp->flags=ptype(p->left);
     p->ntyp->next=clone_typ(p->left->ntyp);
+    fix_addr_ptype(p);
     return ok;
   }
   if(f==ADDRESSA){
     p->ntyp=clone_typ(p->left->ntyp);
-    p->ntyp->flags=POINTER_TYPE(p->left->ntyp);
+    p->ntyp->flags=ptype(p->left);
+    fix_addr_ptype(p);
     return ok;
   }
   if(f==ADDRESSS){
     int i,n=-1;
     struct_list *sl=0;
     if(!ecpp){
-    for(i=0;i<p->left->ntyp->exact->count;i++)
-      if(!strcmp((*p->left->ntyp->exact->sl)[i].identifier,p->right->identifier)) n=i;
+      for(i=0;i<p->left->ntyp->exact->count;i++)
+	if(!strcmp((*p->left->ntyp->exact->sl)[i].identifier,p->right->identifier)) n=i;
       if(n<0)
         return 0;
       else
         sl=&(*p->left->ntyp->exact->sl)[n];
     }
 #ifdef HAVE_ECPP
-    /* search also in base class(es) for data member */
-    if(ecpp){
-      if(n<0){
-        struct_declaration *sd, *sd2, *merk_cc;
-        char *id;
-        merk_cc=current_class;
-        current_class=p->left->ntyp->exact;
-        sd2=ecpp_find_scope(p->right->identifier,&id);
-        current_class=merk_cc;
-        if(sd2){
-          sd=sd2;
-        }else{
-          id=p->right->identifier;
-          sd=p->left->ntyp->exact;
-        }
-	      while(sd){
-	        for(i=0;i<sd->count;++i){
-	            if(!strcmp((*sd->sl)[i].identifier,id)){
-	            sl=&(*sd->sl)[i];
-	          break;
-	            }
-	          }
-	          if(sl)break;
-	        sd=sd->base_class;
-	      }
-	      if(!sl){
-	        return 0;
-	      }
-	    }else{
-	      sl=&(*p->left->ntyp->exact->sl)[n];
-	    }
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     p->ntyp=new_typ();
     if(!p->left->ntyp) ierror(0);
     if(!p->left->ntyp->exact) ierror(0);
     if(!sl->styp) ierror(0);
     p->ntyp->next=clone_typ(sl->styp);
-    p->ntyp->flags=POINTER_TYPE(p->ntyp->next);
+    p->ntyp->flags=ptype(p->left);
+    fix_addr_ptype(p);
     return ok;
   }
   if(f==DSTRUCT){
@@ -1530,55 +1584,55 @@ int type_expression2(np p,type *ttyp)
       offset=struct_offset(sd,identifier);
     }
 #ifdef HAVE_ECPP
-    if(ecpp){
-      struct_list *sl;
-      struct_declaration *sd2=sd;
-      char *id;
-      struct_declaration *merk_cc;
-      merk_cc=current_class;
-      current_class=p->left->ntyp->exact;
-      sd2=ecpp_find_scope(identifier,&id);
-      current_class=merk_cc;
-      if(!sd2){
-        id=identifier;
-        sd2=p->left->ntyp->exact;
-      }
-      sl=ecpp_find_member(id,sd2,&sd2,1);
-      if(!sl)ierror(0); /* FIXME - should be member not found error or so */
-      if(ISFUNC(sl->styp->flags)){
-        /* method */
-        Var* v;
-        np this;
-        v=ecpp_find_ext_var(sl->mangled_identifier);
-        if(!v){ierror(0);return 0;}
-        v=ecpp_find_overloaded_func(v,sd,ecpp_al);
-        if(!v)return 0;
-        this=new_node();
-        this->flags=ADDRESS;
-        this->left=p->left;
-        ok&=type_expression2(this,0);
-        if(!ok)return 0;
-        if(ecpp_this)ierror(0);
-        ecpp_this=this;
-        free_expression(p->right);
-        memset(p,0,NODES);
-        p->flags=IDENTIFIER;
-        p->identifier=add_identifier(v->identifier,strlen(v->identifier));
-        p->o.v=v;
-        return type_expression2(p,0);
-      }else if(sl->styp->ecpp_flags&ECPP_STATIC){
-        /* static data member */
-        free_expression(p->left); free_expression(p->right);
-        memset(p,0,NODES);
-        p->flags=IDENTIFIER;
-        p->identifier=add_identifier(sl->mangled_identifier,strlen(sl->mangled_identifier));
-        return type_expression2(p,0);
-      }else{
-        /* non-static data member */
-        if(!ecpp_check_access(sl->styp,sd2,sd))return 0;
-      }
-      offset=ecpp_struct_offset(sd,id,sd2);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(ISUNION(p->left->ntyp->flags)) offset=l2zm(0L);
     p->flags=CONTENT;
@@ -1640,7 +1694,7 @@ int type_expression2(np p,type *ttyp)
 	return 0;
       }else{
 #ifdef HAVE_MISRA
-	misra(101);
+/* removed */
 #endif
 	if((p->left->ntyp->next->flags&NQ)==VOID)
 	  {error(95);return 0;}
@@ -1654,13 +1708,13 @@ int type_expression2(np p,type *ttyp)
     argument_list *al;int i,flags=0;char *s=0;
     struct_declaration *sd;
 #ifdef HAVE_ECPP
-    if(ecpp){
-      np this_merk=ecpp_this;
-      ecpp_this=0;
-      ok&=ecpp_transform_call(p,this_merk);
-      if(!ok)return 0;
-      if(p->flags!=CALL)return type_expression2(p,0);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     al=p->alist;
     if(!ISPOINTER(p->left->ntyp->flags)||!ISFUNC(p->left->ntyp->next->flags))
@@ -1673,7 +1727,7 @@ int type_expression2(np p,type *ttyp)
     if(!sd) ierror(0);
     if(sd->count==0){
 #ifdef HAVE_MISRA
-      misra_neu(71,8,1,0);
+/* removed */
 #endif
       error(162);
       if(s){
@@ -1701,8 +1755,8 @@ int type_expression2(np p,type *ttyp)
       if(!(*sd->sl)[i].styp) return ok; /* nur Bezeichner, aber kein Typ im Prototype */
       if(!test_assignment((*sd->sl)[i].styp,al->arg)) return 0;
 #ifdef HAVE_MISRA
-      if(misracheck&&!compatible_types((*sd->sl)[i].styp,al->arg->ntyp,NQ))
-	misra(77);
+/* removed */
+/* removed */
 #endif
       if(i==sd->count-1&&(flags&(PRINTFLIKE|SCANFLIKE))){
 	if(al->arg->left&&al->arg->left->flags==STRING){
@@ -1715,6 +1769,7 @@ int type_expression2(np p,type *ttyp)
 	    type *t;
 	    enum{LL=1,HH};
 	    c=(int)zm2l(zc2zm(cl->other->val.vchar));
+	    c=CHARBACK(c);
 	    cl=cl->next;
 	    if(c==0){
 	      if(cl) error(215);
@@ -1723,6 +1778,7 @@ int type_expression2(np p,type *ttyp)
 	    if(c!='%') continue;
 	    if(!cl){error(214);return ok;}
 	    c=(int)zm2l(zc2zm(cl->other->val.vchar));
+	    c=CHARBACK(c);
 	    cl=cl->next;
 	    while(isdigit((unsigned char)c)||
 		  c=='-'||c=='+'||c==' '||c=='#'||c=='.'||
@@ -1743,15 +1799,16 @@ int type_expression2(np p,type *ttyp)
 		  fflags=c;
 	      }
 	      c=(int)zm2l(zc2zm(cl->other->val.vchar));
+	      c=CHARBACK(c);
 	      cl=cl->next;
 	      if(!cl){error(214);return ok;}
 	    }
 	    /*FIXME: assumes intmax_t==long long */
 	    if(fflags=='j') fflags=LL;
 #if HAVE_INT_SIZET	    
-	    if(fflags=='z') fflags='l';
-#else
 	    if(fflags=='z') fflags=' ';
+#else
+	    if(fflags=='z') fflags='l';
 #endif
 	    if(fflags=='t'){
 	      if(PTRDIFF_T(CHAR)==LLONG)
@@ -1841,6 +1898,7 @@ int type_expression2(np p,type *ttyp)
 		fused|=3;
 		do{
 		  c=(int)zm2l(zc2zm(cl->other->val.vchar));
+		  c=CHARBACK(c);
 		  cl=cl->next;
 		  if(!cl){error(214);return ok;}
 		}while(c!=']');     /*  fall through    */
@@ -1868,7 +1926,7 @@ int type_expression2(np p,type *ttyp)
 		if(fflags=='h'&&at!=(UNSIGNED|SHORT)){error(214);return ok;}
 		if(fflags==' '&&at!=(UNSIGNED|INT)){error(214);return ok;}
 		if(fflags=='l'&&at!=(UNSIGNED|LONG)){error(214);return ok;}
-		if(fflags==LL&&at!=LLONG){error(214);return ok;}
+		if(fflags==LL&&at!=(UNSIGNED|LLONG)){error(214);return ok;}
 		break;
 	      case 'e':
 	      case 'f':
@@ -1958,11 +2016,17 @@ int type_expression2(np p,type *ttyp)
     }
     if(ISPOINTER(p->left->ntyp->flags)&&ISPOINTER(p->right->ntyp->flags)){
       if((p->left->ntyp->next->flags&NQ)==VOID){
-	p->ntyp=clone_typ(p->left->ntyp);
+	if(nullpointer(p->left))
+	  p->ntyp=clone_typ(p->right->ntyp);
+	else
+	  p->ntyp=clone_typ(p->left->ntyp);
 	return 1;
       }
       if((p->right->ntyp->next->flags&NQ)==VOID){
-	p->ntyp=clone_typ(p->right->ntyp);
+	if(nullpointer(p->right))
+	  p->ntyp=clone_typ(p->left->ntyp);
+	else
+	  p->ntyp=clone_typ(p->right->ntyp);
 	return 1;
       }
     }
@@ -2165,6 +2229,7 @@ int alg_opt(np p,type *ttyp)
             insert_constn(p);
             if(!p->left->sidefx){free_expression(p->left);p->left=0;} else make_cexpr(p->left);
             if(!p->right->sidefx){free_expression(p->right);p->right=0;} else make_cexpr(p->right);
+
 /*            return(type_expression2(p,ttyp));   */
             return 1;
         }
@@ -2176,23 +2241,48 @@ int alg_opt(np p,type *ttyp)
 	    dontopt=0;
             return type_expression2(p,ttyp);
         }
-	if(f==AND&&(!ttyp||(ttyp->flags&NQ)>CHAR)&&shortcut(AND,CHAR)&&zumleq(u2,t_max[CHAR])){
-	  static type st={CHAR};
-	  return type_expression2(p,&st);
-	}
-	if(f==AND&&(!ttyp||(ttyp->flags&NQ)>CHAR)&&(p->ntyp->flags&UNSIGNED)&&shortcut(AND,UNSIGNED|CHAR)&&zumleq(u2,tu_max[CHAR])){
-	  static type st={UNSIGNED|CHAR};
-	  return type_expression2(p,&st);
-	}
-	if(f==AND&&(!ttyp||(ttyp->flags&NQ)>SHORT)&&shortcut(AND,SHORT)&&zumleq(s2,t_max[SHORT])){
-	  static type st={SHORT};
-	  return type_expression2(p,&st);
-	}
-	if(f==AND&&(!ttyp||(ttyp->flags&NQ)>SHORT)&&(p->ntyp->flags&UNSIGNED)&&shortcut(AND,UNSIGNED|SHORT)&&zumleq(u2,tu_max[SHORT])){
-	  static type st={UNSIGNED|SHORT};
-	  return type_expression2(p,&st);
-	}
+	/* check volatile */
+	if(0) /* TODO: make this efficient */
+	{
+	  type st={0};
+	  if(!zmeqto(sizetab[CHAR],sizetab[SHORT])){
+	    //if(f==AND&&(!ttyp||(ttyp->flags&NQ)>CHAR)&&shortcut(AND,CHAR)&&zumleq(u2,t_max[CHAR]))
+	    //st.flags=CHAR;
+	    if(f==AND&&(!ttyp||(ttyp->flags&NQ)>CHAR)/*&&(p->ntyp->flags&UNSIGNED)*/&&shortcut(AND,UNSIGNED|CHAR)&&zumleq(u2,tu_max[CHAR]))
+	      st.flags=UNSIGNED|CHAR;
+	  }
+	  if(!zmeqto(sizetab[SHORT],sizetab[INT])){
+	    //if(f==AND&&(!ttyp||(ttyp->flags&NQ)>SHORT)&&shortcut(AND,SHORT)&&zumleq(s2,t_max[SHORT]))
+	    //st.flags=SHORT;
+	    if(f==AND&&(!ttyp||(ttyp->flags&NQ)>SHORT)/*&&(p->ntyp->flags&UNSIGNED)*/&&shortcut(AND,UNSIGNED|SHORT)&&zumleq(u2,tu_max[SHORT]))
+	      st.flags=UNSIGNED|SHORT;
+	  }
+	  //if(!ttyp&&(p->left->ntyp->flags&NQ)>INT) st.flags=0;
+	  if(st.flags){
+	    int ret;type *otyp;np n;
+	    if(!p->ntyp) ierror(0);
+	    otyp=clone_typ(p->ntyp);
+	    n=new_node();
+	    n->left=p->left;
+	    n->right=0;
+	    n->flags=CAST;
+	    n->ntyp=clone_typ(&st);
+	    eval_const(&p->right->val,p->right->ntyp->flags);
+	    p->right->ntyp->flags=st.flags;
+	    insert_const(&p->right->val,st.flags);
+	    p->left=n;
+	    n=new_node();
+	    *n=*p;
+	    p->left=n;
+	    p->right=0;
+	    p->flags=CAST;
+	    p->ntyp=otyp;
+	    ret=type_expression2(p->left,&st);
 
+	    return ret;
+	  }
+	}
+	
     }
     if(c==1){
         /*  0-a=-a  */
@@ -2227,7 +2317,7 @@ void make_cexpr(np p)
 /*  Fuehrt rekursiven Abstieg durch. Ist das so korrekt?                */
 {
     int f=p->flags;
-    if(f!=ASSIGN&&f!=ASSIGNOP&&f!=CALL&&f!=POSTINC&&f!=POSTDEC&&f!=PREINC&&f!=PREDEC){
+    if(f!=ASSIGN&&f!=ASSIGNOP&&f!=CALL&&f!=POSTINC&&f!=POSTDEC&&f!=PREINC&&f!=PREDEC&&f!=LAND&&f!=LOR){
         p->flags=PCEXPR;
         if(p->left) make_cexpr(p->left);
         if(p->right) make_cexpr(p->right);
@@ -2241,7 +2331,7 @@ int test_assignment(type *zt,np q)
     if(ISINT(zt->flags)&&ISINT(qt->flags)&&
       !zmleq(sizetab[qt->flags&NQ],sizetab[zt->flags&NQ])&&q->flags!=CEXPR){
 #ifdef HAVE_MISRA
-      misra(43);
+/* removed */
 #endif
       error(166);
     }
@@ -2289,31 +2379,31 @@ int test_assignment(type *zt,np q)
         error(85);
       }
 #ifdef HAVE_ECPP
-      /* if q has z as its parent then assignment without cast is ok */
-      else if(ecpp&&ISSTRUCT(qt->next->flags)&&ISSTRUCT(zt->next->flags)){
-        struct_declaration *base;
-        base=qt->next->exact->base_class;
-        while(base&&base!=zt->next->exact){
-          base=base->base_class;
-        }
-        if(!base){
-          error(85);
-        }else{
-          if((qt->next->exact->ecpp_flags&ECPP_VIRTUAL)!=(base->ecpp_flags&ECPP_VIRTUAL)){
-            np qcopy;
-            int ok;
-            qcopy=new_node();
-            memset(q,0,NODES);
-            q->flags=CAST;
-            q->left=qcopy;
-            q->ntyp=clone_typ(zt);
-            ok=type_expression2(q,0);
-            if(!ok)ierror(0);
-          }
-        }
-      }else{
-        error(85);
-      }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     }else{
       if((qt->next->flags&CONST)&&!(zt->next->flags&CONST))
@@ -2337,289 +2427,289 @@ int test_assignment(type *zt,np q)
   return 0;
 }
 #ifdef HAVE_ECPP
-np ecpp_clone_tree(np p)
-{
-  np new;
-  argument_list *alist_p,*alist_new;
-  if(!p) return 0;
-  new=new_node();
-  *new=*p;
-  new->ntyp=clone_typ(p->ntyp);
-  new->left=ecpp_clone_tree(p->left);
-  new->right=ecpp_clone_tree(p->right);
-  new->cl=0;new->dsize=0;
-  new->alist=0;
-  alist_p=p->alist; alist_new=0;
-  if(p->flags==CALL){
-    while(alist_p){
-      if(alist_new==0)alist_new=new->alist=mymalloc(sizeof(argument_list));
-      else{alist_new->next=mymalloc(sizeof(argument_list)); alist_new=alist_new->next;}
-      alist_new->arg=ecpp_clone_tree(alist_p->arg);
-      alist_new->pushic=0;
-      alist_p=alist_p->next;
-    }
-    if(alist_new)alist_new->next=0;
-  }
-  return new;
-}
-int ecpp_transform_call(np p, np this){
-  int ok=1;
-  type* functyp;
-  if(!ecpp||!p->flags==CALL){ierror(0);return 0;}
-  if(p->left->ntyp->exact&&p->left->ntyp->exact->ecpp_flags&ECPP_DTOR) return 1;
-
-  if(!ISPOINTER(p->left->ntyp->flags)||!ISFUNC(p->left->ntyp->next->flags)){
-    ierror(0);
-    return 0;
-  }
-  functyp=p->left->ntyp->next;
-
-  if(!functyp->exact->higher_nesting){
-    /* not a method */
-    return ok;
-  }
-
-  if(functyp->ecpp_flags&ECPP_STATIC){
-    return ok;
-  }
-  if(!this){
-    if(!current_func||!current_func->exact->higher_nesting){ierror(0);return 0;}
-    this=new_node();
-    this->flags=IDENTIFIER;
-    this->identifier=add_identifier("this",4);
-    ok&=type_expression2(this,0);
-    if(!ok){ return 0;}
-  }
-  if(!ISPOINTER(this->ntyp->flags)||!ISSTRUCT(this->ntyp->next->flags)){ierror(0);return 0;}
-
-  if(functyp->exact->ecpp_flags&ECPP_VIRTUAL){
-    /* method call using dynamic function address (virtual function)*/
-    Var *v;
-    np assign, call;
-    argument_list *n;
-    v=add_tmp_var(this->ntyp);
-    assign=new_node();
-    assign->flags=ASSIGN;
-    assign->left=new_node();
-    assign->left->flags=IDENTIFIER;
-    assign->left->identifier=empty;
-    assign->left->o.v=v;
-    assign->right=this;
-    ok&=type_expression(assign);
-    if(!ok) {ierror(0); return 0;}
-    call=new_node();
-    call->left=new_node();
-    call->left->flags=DSTRUCT;
-    call->left->right=new_node();
-    call->left->right->flags=MEMBER;
-    call->left->right->identifier=functyp->exact->identifier;
-    call->left->left=new_node();
-    call->left->left->flags=CONTENT;
-    call->left->left->left=new_node();
-    call->left->left->left->flags=DSTRUCT;
-    call->left->left->left->right=new_node();
-    call->left->left->left->right->flags=MEMBER;
-    call->left->left->left->right->identifier="_ZTV";
-    call->left->left->left->left=new_node();
-    call->left->left->left->left->flags=CONTENT;
-    call->left->left->left->left->left=new_node();
-    call->left->left->left->left->left->flags=IDENTIFIER;
-    call->left->left->left->left->left->identifier=empty;
-    call->left->left->left->left->left->o.v=v;
-    n=mymalloc(sizeof(argument_list *));
-    n->arg=new_node();
-    n->arg->flags=IDENTIFIER;
-    n->arg->identifier=empty;
-    n->arg->o.v=v;
-    n->next=call->alist;
-    n->pushic=0;
-    call->alist=n;
-    memset(p,0,NODES);
-    p->flags=KOMMA;
-    p->left=assign;
-    p->right=call;
-  }else{
-    /* method call using static function address */
-    argument_list *n=mymalloc(sizeof(argument_list *));
-    n->arg=this;
-    n->next=p->alist;
-    n->pushic=0;
-    p->alist=n;
-  }
-  return ok;
-}
-int ecpp_rank_arg_type(type *arg,type *t)
-/* returns the rank of how good t fits arg */
-{
-  static const int NO_FIT=-1;
-  static const int EXACT_FIT=1;
-  static const int QUALIFICATION=2;
-  static const int PROMOTION=3;
-  static const int CONVERSION=4;
-  int fa=arg->flags; int fb=t->flags;
-  int fanq=fa&NQ; int fbnq=fb&NQ;
-  int qual;
-  if(!(fa&CONST)&&(fb&CONST))return NO_FIT;
-  if((fa&CONST)==(fb&CONST))qual=EXACT_FIT; else qual=QUALIFICATION;
-  if(ISINT(fa)&&ISINT(fb)){
-    if(fanq==fbnq) return qual;
-    if((fanq==CHAR||fanq==SHORT)&&fbnq==INT) return PROMOTION;
-    return CONVERSION;
-  }
-  if((ISPOINTER(fa)||ISARRAY(fa))&&(ISPOINTER(fb)||ISARRAY(fb))) return CONVERSION;
-  return NO_FIT;
-}
-Var *ecpp_find_best_overloaded_func(ecpp_overload_candidate* cands,int numcands,int numargs,int *ambigp)
-{
-  int i,j,k;
-  int isbest;
-  int ambig;
-  for(i=0;i<numcands;++i){
-    isbest=1;
-    ambig=0;
-    for(j=0;j<numcands;++j){
-      if(j==i)continue;
-      ambig=1;
-      for(k=0;k<numargs;++k){
-        int a=cands[i].ranks[k];
-        int b=cands[j].ranks[k];
-        if(b<a){isbest=0;break;}
-        else if(a<b)ambig=0;
-      }
-      if(!isbest||ambig)break;
-    }
-    if(isbest&&!ambig)break;
-  }
-  *ambigp=ambig;
-  if(i>=numcands)return 0;
-  if(ambig)return 0;
-  return cands[i].v;
-}
-Var *ecpp_find_overloaded_func(Var *startv,struct_declaration *this,argument_list *al)
-{
-  Var *v=0;
-  int i;
-  int ambig=0;
-  int numargs=0;
-  argument_list *curarg;
-  int argindex;
-  struct_declaration *class;
-  int slindex=-1;
-  int hasthisp;
-  char *id;
-  ecpp_overload_candidate *cands=0;
-  int numcands=0;
-  if(!ISFUNC(startv->vtyp->flags)){ierror(0);return 0;}
-  if(!startv->vtyp->exact->mangled_identifier)return startv; /* has c linkage */
-  if(startv->vtyp->ecpp_flags&ECPP_DTOR)return startv;
-  id=startv->vtyp->exact->identifier;
-  curarg=al;
-  while(curarg){ numargs++; curarg=curarg->next; }
-  class=startv->vtyp->exact->higher_nesting;
-  cands=mymalloc(sizeof(ecpp_overload_candidate));
-  cands[0].ranks=mymalloc(numargs*sizeof(int));
-  for(;;){
-    if(v==0){
-      v=startv;
-    }else{
-      if(class){
-        v=0;
-        while(++slindex<class->count){
-          if(!strcmp(id,(*class->sl)[slindex].identifier)){
-            v=ecpp_find_ext_var((*class->sl)[slindex].mangled_identifier);
-            if(v==startv){v=0;continue;}
-            break;
-          }
-        }
-      }else{
-        while(v=v->next){
-          if(!ISFUNC(v->vtyp->flags))continue;
-          if(!v->vtyp->exact->identifier||strcmp(id,v->vtyp->exact->identifier))continue;
-          break;
-        }
-      }
-    }
-    if(!v)break;
-    hasthisp=v->vtyp->exact->higher_nesting&&!(v->vtyp->ecpp_flags&ECPP_STATIC);
-    if((*v->vtyp->exact->sl)[v->vtyp->exact->count-1].styp->flags!=VOID)
-      cands[numcands].ellipsis=v->vtyp->exact->count+1;
-    else cands[numcands].ellipsis=0;
-    if(cands[numcands].ellipsis){ if(v->vtyp->exact->count>numargs+hasthisp)continue;
-    }else{ if(v->vtyp->exact->count!=numargs+1+hasthisp)continue;}
-    curarg=al;
-    for(argindex=0;argindex<numargs;++argindex){
-      int rank;
-      if(argindex+hasthisp>=v->vtyp->exact->count)rank=10;
-      else rank=ecpp_rank_arg_type(curarg->arg->ntyp,(*v->vtyp->exact->sl)[argindex+hasthisp].styp);
-      if(rank<=0){argindex=-1;break;}
-      cands[numcands].ranks[argindex]=rank;
-      curarg=curarg->next;
-    }
-    if(argindex<0) continue;
-    cands[numcands].v=v;
-    cands[numcands].worse=0;
-    numcands++;
-    cands=myrealloc(cands,(1+numcands)*sizeof(ecpp_overload_candidate));
-    cands[numcands].ranks=mymalloc(numargs*sizeof(int));
-  }
-  v=ecpp_find_best_overloaded_func(cands,numcands,numargs,&ambig);
-  for(i=0;i<numcands+1;++i){free(cands[i].ranks);}
-  free(cands);
-  if(numcands==0){error(346);return 0;}
-  if(!v){error(347,id);return 0;}
-  if(!ecpp_check_access(v->vtyp,v->vtyp->exact->higher_nesting,this))return 0;
-  return v;
-}
-int ecpp_check_access(type *t,struct_declaration *sd,struct_declaration *this)
-/* tests whether type t, member of sd is accessible from current_func */
-/* this is 0 or the object which wants access */
-{
-  struct_declaration *scope=0;
-  struct_declaration *sd2;
-  int base_access;
-  if(t->ecpp_flags&(ECPP_CTOR|ECPP_DTOR))return 1;
-  if(!(t->ecpp_flags&(ECPP_PRIVATE|ECPP_PROTECTED|ECPP_PUBLIC)))return 1;
-  if(ecpp_is_friend(sd))return 1;
-  if(current_func)scope=current_func->exact->higher_nesting;
-  if(this==sd){
-    if(t->ecpp_flags&ECPP_PRIVATE){
-      if(scope==this) return 1;
-      error(350,"private");return 0;
-    }
-    if(t->ecpp_flags&ECPP_PROTECTED){
-      if(scope==this) return 1;
-      error(350,"protected");return 0;
-    }
-    if(t->ecpp_flags&ECPP_PUBLIC)return 1;
-  }
-  if(this->base_class==sd){
-    if(t->ecpp_flags&ECPP_PRIVATE){
-      error(350,"private");return 0;
-    }
-    if(t->ecpp_flags&ECPP_PROTECTED){
-      if(scope==this) return 1;
-      error(350,"protected");return 0;
-    }
-    if(t->ecpp_flags&ECPP_PUBLIC)return 1;
-  }
-  base_access=ECPP_PUBLIC;
-  sd2=this->base_class;
-  while(sd2!=sd){
-    base_access|=sd2->base_access;
-    sd2=sd2->base_class;
-  }
-  if(t->ecpp_flags&ECPP_PRIVATE){
-    error(350,"not allowed");return 0;
-  }
-  if(t->ecpp_flags&ECPP_PROTECTED){
-    if(scope==this&&!(base_access&ECPP_PRIVATE))return 1;
-    error(350,"not allowed");return 0;
-  }
-  if(t->ecpp_flags&ECPP_PUBLIC){
-    if(scope==this&&!(base_access&ECPP_PRIVATE))return 1;
-    if(!(base_access&ECPP_PRIVATE)&&!(base_access&ECPP_PROTECTED))return 1;
-    error(350,"not allowed");return 0;
-  }
-  ierror(0);return 0;
-}
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif

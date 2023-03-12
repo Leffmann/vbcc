@@ -1,4 +1,4 @@
-/*  $VER: vbcc (main.c) $Revision: 1.50 $    */
+/*  $VER: vbcc (main.c) $Revision: 1.66 $    */
 #include "vbcc_cpp.h"
 #include "vbc.h"
 #include "opt.h"
@@ -72,8 +72,9 @@ void translation_unit(void)
     killsp();
     if(eof||ctok->type!=NAME){
       if(!eof){
-	error(0);
-	raus();
+	error(369);
+	next_token();
+	continue;
       }else{
 	if(cross_module){
 	  int n=0;
@@ -349,6 +350,11 @@ void gen_function(FILE *f,Var *v,int real_gen)
   cur_func=v->identifier;
   if(!real_gen){
     optimize(optflags,v);
+    if((force_statics||prefer_statics)&&first_var[nesting]){
+      
+      last_var[nesting]->next=v->fi->vars;
+      v->fi->vars=first_var[nesting];
+    }
     memset(regs_modified,0,RSIZE);
     /* pseudeo generator pass to get regs_modified */
     v->fi->opt_ic=clone_ic(first_ic);
@@ -572,6 +578,7 @@ int main(int argc,char *argv[])
   if(c_flags[31]&USEDFLAG) inline_depth=c_flags_val[31].l;
   if(c_flags[32]&USEDFLAG) debug_info=1;
   if(c_flags[33]&USEDFLAG) c99=1;
+  if(c_flags[60]&USEDFLAG) c99=0;
   if(c_flags[34]&USEDFLAG) {wpo=1;no_emit=1;}
   if(c_flags[36]&USEDFLAG) {noitra=1;}
   if(c_flags[37]&USEDFLAG) {
@@ -609,13 +616,20 @@ int main(int argc,char *argv[])
     if(hs!=0) hash_ext=new_hashtable(hs);
   }
 
+
   if(wpo){
     cross_module=1;
     optflags=-1;
   }
   if(optsize){
     if(!(c_flags[25]&USEDFLAG)) unroll_size=0;
+    clist_copy_pointer=clist_copy_stack;
   }
+
+  if(optspeed){
+    clist_copy_pointer=256;
+  }
+
   if(ecpp&&c99){
 	  error(333, "c99", "ecpp");
   }
@@ -640,6 +654,26 @@ int main(int argc,char *argv[])
   if(files<=0&&!(c_flags[35]&USEDFLAG)) error(6);
   stackalign=l2zm(0L);
   if(!init_cg()) exit(EXIT_FAILURE);
+
+  if(c_flags[55]&USEDFLAG) {clist_copy_stack=c_flags_val[55].l;}
+  if(c_flags[56]&USEDFLAG) {clist_copy_static=c_flags_val[56].l;}
+  if(c_flags[57]&USEDFLAG) {clist_copy_pointer=c_flags_val[57].l;}
+  if(c_flags[58]&USEDFLAG) {inline_memcpy_sz=c_flags_val[58].l;}
+  if(c_flags[61]&USEDFLAG) {force_statics=1;}
+  if(c_flags[62]&USEDFLAG) {prefer_statics=1;}
+  if(c_flags[63]&USEDFLAG) {range_opt=1;}
+  if(c_flags[64]&USEDFLAG) {merge_strings=1;}
+  if(c_flags[65]&USEDFLAG) {sec_per_obj=1;}
+  if(c_flags[66]&USEDFLAG) {no_eff_ics=1;}
+  if(c_flags[67]&USEDFLAG) {early_eff_ics=1;}
+
+
+  if(!(optflags&2)){
+    for(i=1;i<=MAXR;i++){
+      sregsa[i]=regsa[i];
+      if(regsa[i]==REGSA_TEMPS) regsa[i]=0;
+    }
+  }
   if(zmeqto(stackalign,l2zm(0L)))
     stackalign=maxalign;
   for(i=0;i<=MAX_TYPE;i++)
@@ -713,8 +747,12 @@ int main(int argc,char *argv[])
       char *p;
       depout=open_out(inname,"dep");
       /* nicht super schoen (besser letzten Punkt statt ersten), aber kurz.. */
-      for(p=inname;*p&&*p!='.';p++) fprintf(depout,"%c",*p);
-      fprintf(depout,".o: %s",inname);
+      if(c_flags[59]&USEDFLAG){
+	fprintf(depout,"%s: %s",c_flags_val[59].p,inname);
+      }else{
+	for(p=inname;*p&&*p!='.';p++) fprintf(depout,"%c",*p);
+	fprintf(depout,".o: %s",inname);
+      }
     }
     if(c_flags[18]&USEDFLAG) ppout=open_out(inname,"i");
     if(!input_wpo){
@@ -753,6 +791,10 @@ int main(int argc,char *argv[])
       define_macro(&ls,"__noinline=__vattr(\"noinline()\")");
       if(c99)
 	define_macro(&ls,"__STDC_VERSION__=199901L");
+      if(optspeed)
+	define_macro(&ls,"__OPTSPEED__");
+      if(optsize)
+	define_macro(&ls,"__OPTSIZE__");
       misracheck=mcmerk;
       enter_file(&ls,ls.flags);
     }
@@ -777,111 +819,111 @@ int main(int argc,char *argv[])
     tunit *t;
     Var *v,*sf;
 #if HAVE_OSEK
-    int tprio;
-    char tstring[16];
-    static bvtype rused[RSIZE/sizeof(bvtype)];
-    static bvtype taskregs[RSIZE/sizeof(bvtype)];
-    static bvtype nonpairs[RSIZE/sizeof(bvtype)];
-    static bvtype isrregs[RSIZE/sizeof(bvtype)];
-    static bvtype tmpr[RSIZE/sizeof(bvtype)];
-    tasklist *tasks=0;
-    int tcnt=0;
-    if(DEBUG&1) printf("optimizing tasks:\n");
-    bvclear(taskregs,RSIZE);
-    for(i=1;i<=MAXR;i++)
-      if(!reg_pair(i,&rp))
-	BSET(nonpairs,i);
-    /*FIXME: more than 20*/
-    for(tprio=20;tprio>=0;tprio--){
-      int flag=0,r;
-      sprintf(tstring,"taskprio(%d)",tprio);
-      bvunite(rused,taskregs,RSIZE);
-      for(r=1;r<=MAXR;r++){
-	if(!noitra&&BTST(rused,r)){
-	  if(DEBUG&1) printf("taskreg used: %s\n",regnames[r]);
-	  reg_prio[r]=-1; /*FIXME: ugly intermediate hack */
-	}
-      }
-      for(v=first_ext;v;v=v->next){
-	if(ISFUNC(v->vtyp->flags)&&(v->flags&DEFINED)&&v->vattr&&strstr(v->vattr,tstring)){
-	  if(DEBUG&1) printf("optimizing task at prio %d\n",tprio);
-	  tcnt++;
-	  tasks=myrealloc(tasks,sizeof(*tasks)*tcnt);
-	  tasks[tcnt-1].v=v;
-	  if(!v->vattr||!strstr(v->vattr,"taskid(")) ierror(0);
-	  {
-	    char *p=strstr(v->vattr,"taskid(");
-	    sscanf(p+7,"%i",&tasks[tcnt-1].taskid);
-	  }
-	  tasks[tcnt-1].prio=tprio;
-	  bvclear(task_preempt_regs,RSIZE);
-	  bvclear(task_schedule_regs,RSIZE);
-	  do_function(v);
-	  if(!v->fi) v->fi=new_fi();
-	  tasks[tcnt-1].flags=v->fi->osflags;
-	  if(v->vattr&&strstr(v->vattr,"nonpreemptive;")) tasks[tcnt-1].flags|=NON_PREEMPTIVE;
-	  if(v->vattr&&strstr(v->vattr,"isr;"))
-	    tasks[tcnt-1].flags|=ISR;
-	  if(!(v->fi->flags&ALL_REGS))
-	    memset(v->fi->regs_modified,0xff,RSIZE);
-	  bvunite(taskregs,v->fi->regs_modified,RSIZE);
-	  bvcopy(tasks[tcnt-1].preempt_context,task_preempt_regs,RSIZE);
-	  bvcopy(tasks[tcnt-1].schedule_context,task_schedule_regs,RSIZE);
-	  bvcopy(tasks[tcnt-1].context,rused,RSIZE);
-	  if(tasks[tcnt-1].flags&NON_PREEMPTIVE)
-	    bvintersect(tasks[tcnt-1].context,task_schedule_regs,RSIZE);
-	  else
-	    bvintersect(tasks[tcnt-1].context,v->fi->regs_modified,RSIZE);
-	  if(tasks[tcnt-1].flags&ISR){
-	    bvunite(isrregs,v->fi->regs_modified,RSIZE);
-	  }else{
-	    /* all (incl. non-preemptive) tasks can be preempted by ISRs */
-	    bvcopy(tmpr,v->fi->regs_modified,RSIZE);
-	    bvintersect(tmpr,isrregs,RSIZE);
-	    bvunite(tasks[tcnt-1].context,tmpr,RSIZE);
-	  }
-	  bvintersect(tasks[tcnt-1].context,nonpairs,RSIZE);
-	  bvcopy(tasks[tcnt-1].unsaved_context,v->fi->regs_modified,RSIZE);
-	  bvintersect(tasks[tcnt-1].unsaved_context,nonpairs,RSIZE);
-	  bvdiff(tasks[tcnt-1].unsaved_context,tasks[tcnt-1].context,RSIZE);
-	}
-      }
-    }  
-    /* add preempted registers */
-    bvunite(rused,taskregs,RSIZE);
-    for(i=0;i<tcnt;i++){
-      for(j=0;j<tcnt;j++)
-	if(i!=j)
-	  bvintersect(tasks[i].preempt_context,tasks[j].v->fi->regs_modified,RSIZE);
-      bvunite(tasks[i].context,tasks[i].preempt_context,RSIZE);
-    }
-    
-    if(tcnt) printf("\ntask information:\n");
-    for(i=0;i<tcnt;i++){
-      int r;
-      printf("\ntask %d (%s) id %d prio %d:\n",i,tasks[i].v->identifier,tasks[i].taskid,tasks[i].prio);
-      if(tasks[i].flags&DOES_BLOCK) printf("does block\n");
-      if(tasks[i].flags&NON_PREEMPTIVE) printf("non-preemptive\n");
-      if(tasks[i].flags&CALLS_SCHED) printf("calls scheduler\n");
-      if(tasks[i].flags&ISR) printf("is interrupt\n");
-      printf("context: ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].context,r)) printf(" %s",regnames[r]);
-      printf("\nlive across WaitEvent(): ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].preempt_context,r)) printf(" %s",regnames[r]);
-      printf("\nlive across Schedule(): ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].schedule_context,r)) printf(" %s",regnames[r]);
-      printf("\nall registers used: ");
-      for(r=1;r<=MAXR;r++)
-	if(BTST(tasks[i].v->fi->regs_modified,r)) printf(" %s",regnames[r]);
-      printf("\n");
-    }
-    if(tcnt>0){
-      extern void emit_os(FILE *,tasklist *,int);
-      emit_os(out,tasks,tcnt);
-    }
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
     if(DEBUG&1) printf("first optimizing\n");
     for(v=first_ext;v;v=v->next){
@@ -900,7 +942,9 @@ int main(int argc,char *argv[])
     for(v=first_ext;v;v=v->next){
       if((v->flags&(DEFINED|TENTATIVE))&&(v->flags&(INLINEFUNC|INLINEEXT))!=INLINEFUNC){
 	if(!final||!strcmp(v->identifier,"main")||(v->vattr&&strstr(v->vattr,"entry"))){
+#ifndef NO_OPTIMIZER
 	  used_objects(v);
+#endif
 	  if(ISFUNC(v->vtyp->flags)) do_function(v);
 	}
       }
@@ -1581,32 +1625,32 @@ void do_pragma(char *s)
     if(tree) free_expression(tree);
 #endif
 #ifdef HAVE_ECPP
-  /* cd: for more detailed debugging */
-  }else if(!strncmp("print_decls",s,11)){
-    int i=0;
-    struct_declaration *sd;
-    s+=11;pragma_killsp();
-    sd = first_sd[0];
-    while(sd){
-      fprintf(stdout, "decl %d: ", i);
-      prl(stdout, sd);
-      fprintf(stdout, "\n");
-      sd = sd->next;
-      ++i;
-    }
-  }else if(!strncmp("print_vars",s,10)){
-    int i=0;
-    Var *v;
-    s+=10;pragma_killsp();
-    v = first_ext;
-    while(v){
-      fprintf(stdout, "var %d: ", i);
-      print_var(stdout, v);
-      fprintf(stdout, "\n");
-      v = v->next;
-      ++i;
-    }
-    fprintf(stdout, "\n");
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
+/* removed */
 #endif
   }else{
 #ifdef HAVE_TARGET_PRAGMAS
@@ -1649,9 +1693,9 @@ void enter_block(void)
         afterlabel=0;
     }
 #ifdef HAVE_ECPP
-  if(ecpp){
-    ecpp_dlist[nesting]=0;
-  }
+/* removed */
+/* removed */
+/* removed */
 #endif
 }
 void leave_block(void)
@@ -1662,9 +1706,9 @@ void leave_block(void)
   if(inleave) return;
   inleave=1;
 #ifdef HAVE_ECPP
-  if(ecpp&&nesting>1){
-    ecpp_auto_call_dtors();
-  }
+/* removed */
+/* removed */
+/* removed */
 #endif
   for(i=1;i<=MAXR;i++)
     if(regbnesting[i]==nesting) regsbuf[i]=0;
@@ -1766,13 +1810,15 @@ void do_error(int errn,va_list vl)
 /*  Behandelt Ausgaben wie Fehler und Meldungen */
 {
   int type,have_stack=0;
+    int treat_warning_as_error=0;
     char *errstr="",*txt=filename;
     if(c_flags_val[8].l&&c_flags_val[8].l<=errors)
       return;
     if(errn==-1) errn=158;
     type=err_out[errn].flags;
+    treat_warning_as_error=(type&WARNING)&&(c_flags[54]&USEDFLAG);
 #ifdef HAVE_MISRA
-    if(type&ANSIV) misra_neu(1,1,1,-1);
+/* removed */
 #endif
     if(type&DONTWARN) return;
     if(type&WARNING) errstr="warning";
@@ -1824,7 +1870,8 @@ void do_error(int errn,va_list vl)
 	fprintf(stderr,"\tincluded from file \"%s\":%ld\n",sc[i].long_name?sc[i].long_name:sc[i].name,sc[i].line);
       }
     }
-    if(type&ERROR){
+    if(treat_warning_as_error){fprintf(stderr,"warning %d treated as error [-warnings-as-errors]\n",errn);}
+    if(type&ERROR||treat_warning_as_error){
       errors++;
       if(c_flags_val[8].l&&c_flags_val[8].l<=errors&&!(type&NORAUS))
 	{fprintf(stderr,"Maximum number of errors reached!\n");raus();}

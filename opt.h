@@ -1,4 +1,4 @@
-/*  $VER: vbcc (opt.h) $Revision: 1.2 $    */
+/*  $VER: vbcc (opt.h) $Revision: 1.4 $    */
 
 #include "supp.h"
 
@@ -50,6 +50,12 @@ extern bvtype **copies;
 extern int have_alias;
 extern int static_cse,dref_cse;
 
+typedef struct {
+  union atyps min,max;
+} range;
+
+extern range *rangebuf;
+
 typedef struct flowgraph{
   IC *start,*end;
   struct flowgraph *normalout,*branchout;
@@ -67,6 +73,8 @@ typedef struct flowgraph{
   bvtype *cp_in,*cp_out,*cp_gen,*cp_kill;
   /* points-to-info */
   bvtype **pt;
+  /* range-info */
+  range *ra_normalout,*ra_branchout;
   /*  Registervariablen   */
   Var *regv[MAXR+1];
   /*  Merker, ob Register gebraucht wurde; MACR+1 Bits    */
@@ -110,6 +118,7 @@ void insert_IC_fg(flowgraph *fg,IC *p,IC *new);
 void insert_allocreg(flowgraph *fg,IC *p,int code,int reg);
 void used_objects(Var *);
 void used_clist(type *,const_list *);
+void fix_shortop(flowgraph *,IC *);
 
 extern Var *lregv[MAXR+1],*first_const,*last_const;
 extern flowgraph *lfg;
@@ -147,6 +156,8 @@ void insert_regs(flowgraph *fg);
 void recalc_offsets(flowgraph *fg);
 void optimize(long flags,Var *function);
 int loop_optimizations(flowgraph *fg);
+int decide_reverse(zmax);
+void range_analysis(flowgraph *fg);
 void ic_uses(IC *p,bvtype *result);
 void ic_changes(IC *p,bvtype *result);
 void create_alias(flowgraph *fg);
